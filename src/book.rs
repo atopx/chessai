@@ -1,5 +1,6 @@
-use std::fs::File;
-use std::io::BufReader;
+use std::fs::{self, File};
+use std::io::{BufRead, BufReader, BufWriter};
+use std::str::FromStr;
 use std::sync::OnceLock;
 
 pub struct Book {
@@ -36,4 +37,29 @@ impl Book {
         }
         return None;
     }
+}
+
+/// input file `book.txt` sample:
+/// 203040,34229,6
+/// 509427,33955,1
+/// 1435796,50371,2
+pub fn builder(input_file: &str, output_file: Option<String>) {
+    let input = fs::File::open(input_file).unwrap();
+    let mut book: Vec<[isize; 3]> = Vec::new();
+    let buffered = BufReader::new(input);
+    for line in buffered.lines() {
+        let mut record: Vec<isize> = Vec::new();
+        for i in line.unwrap().split(",").collect::<Vec<&str>>() {
+            record.push(FromStr::from_str(i).unwrap());
+        }
+        if record.len() == 3 {
+            book.push([record[0], record[1], record[2]])
+        }
+    }
+    let mut writer = match output_file {
+        Some(out) => BufWriter::new(fs::File::create(out).unwrap()),
+        None => BufWriter::new(fs::File::create("book.dat").unwrap()),
+    };
+    bincode::serialize_into(&mut writer, &book).unwrap();
+    println!("success, write {} pieces of `book.dat`", book.len());
 }
