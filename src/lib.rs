@@ -2,43 +2,43 @@ use std::time::{Duration, Instant};
 
 use self::state::{MoveState, Status};
 
-mod book;
-mod pregen;
-mod state;
-mod util;
+pub mod book;
+pub mod pregen;
+pub mod state;
+pub mod util;
 
 #[derive(Clone, Copy, Default)]
-struct Hash {
-    depth: isize,
-    flag: isize,
-    vl: isize,
-    mv: isize,
-    zobrist_lock: isize,
+pub struct Hash {
+    pub depth: isize,
+    pub flag: isize,
+    pub vl: isize,
+    pub mv: isize,
+    pub zobrist_lock: isize,
 }
 
-pub struct ChessAi {
-    sd_player: isize,
-    zobrist_key: isize,
-    zobrist_lock: isize,
-    vl_white: isize,
-    vl_black: isize,
-    distance: isize,
-    mv_list: Vec<isize>,
-    pc_list: Vec<isize>,
-    key_list: Vec<isize>,
-    chk_list: Vec<bool>,
-    squares: [isize; 256],
-    mask: isize,
-    hash_table: Vec<Hash>,
-    history: Vec<isize>,
-    killer_table: Vec<[isize; 2]>,
-    result: isize,
-    all_nodes: isize,
+pub struct Engine {
+    pub sd_player: isize,
+    pub zobrist_key: isize,
+    pub zobrist_lock: isize,
+    pub vl_white: isize,
+    pub vl_black: isize,
+    pub distance: isize,
+    pub mv_list: Vec<isize>,
+    pub pc_list: Vec<isize>,
+    pub key_list: Vec<isize>,
+    pub chk_list: Vec<bool>,
+    pub squares: [isize; 256],
+    pub mask: isize,
+    pub hash_table: Vec<Hash>,
+    pub history: Vec<isize>,
+    pub killer_table: Vec<[isize; 2]>,
+    pub result: isize,
+    pub all_nodes: isize,
 }
 
-impl ChessAi {
+impl Engine {
     pub fn new() -> Self {
-        ChessAi {
+        Engine {
             sd_player: 0,
             zobrist_key: 0,
             zobrist_lock: 0,
@@ -1327,12 +1327,13 @@ impl ChessAi {
 
 #[cfg(test)]
 mod tests {
-    use crate::engine::ChessAi;
+
+    use super::*;
 
     #[test]
     fn test_fen() {
         let fen = "9/2Cca4/3k1C3/4P1p2/4N1b2/4R1r2/4c1n2/3p1n3/2rNK4/9 w";
-        let mut engine = ChessAi::new();
+        let mut engine = Engine::new();
         engine.from_fen(fen);
         assert_eq!(fen, engine.to_fen());
     }
@@ -1340,7 +1341,7 @@ mod tests {
     #[test]
     fn test_engine_26215() {
         let fen: &str = "9/2Cca4/3k1C3/4P1p2/4N1b2/4R1r2/4c1n2/3p1n3/2rNK4/9 w";
-        let mut engine = ChessAi::new();
+        let mut engine = Engine::new();
         engine.from_fen(fen);
         let mv = engine.search_main(64, 1000);
         assert_eq!(mv, 26215);
@@ -1349,7 +1350,7 @@ mod tests {
     #[test]
     fn test_engine_22326() {
         let fen: &str = "C1nNk4/9/9/9/9/9/n1pp5/B3C4/9/3A1K3 w - - 0 1";
-        let mut engine = ChessAi::new();
+        let mut engine = Engine::new();
         engine.from_fen(fen);
         let mv = engine.search_main(64, 1000);
         assert_eq!(mv, 22326);
@@ -1358,7 +1359,7 @@ mod tests {
     #[test]
     fn test_engine_22985() {
         let fen: &str = "4kab2/4a4/8b/9/9/9/9/9/9/4K1R2 w - - 0 1";
-        let mut engine = ChessAi::new();
+        let mut engine = Engine::new();
         engine.from_fen(fen);
         let mv = engine.search_main(64, 1000);
         assert_eq!(mv, 22985);

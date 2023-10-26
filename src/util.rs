@@ -83,19 +83,19 @@ pub fn unsigned_right_shift(x: isize, y: isize) -> isize {
     (x >> (y & 0xf)) as isize
 }
 
-fn cord2uint8(cord: &str) -> isize {
+pub fn cord2uint8(cord: &str) -> isize {
     let alphabet = cord.chars().nth(0).unwrap() as isize - 'A' as isize + 3;
     let numeric = '9' as isize - cord.chars().nth(1).unwrap() as isize + 3;
     numeric << 4 | alphabet
 }
 
-fn iccs2move(iccs: &str) -> isize {
+pub fn iccs2move(iccs: &str) -> isize {
     let src = cord2uint8(&iccs[0..2]);
     let dst = cord2uint8(&iccs[3..5]);
     (dst << 8 | src) as isize
 }
 
-fn move2iccs(mv: isize) -> String {
+pub fn move2iccs(mv: isize) -> String {
     let src = src(mv);
     let dst = dst(mv);
     format!(
