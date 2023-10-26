@@ -196,19 +196,17 @@ impl Engine {
     }
 
     pub fn null_okay(&self) -> bool {
-        let mut vl = match self.sd_player {
-            0 => self.vl_white,
-            _ => self.vl_black,
-        };
-        vl > pregen::NULL_OKAY_MARGIN
+        match self.sd_player {
+            0 => self.vl_white > pregen::NULL_OKAY_MARGIN,
+            _ => self.vl_black > pregen::NULL_OKAY_MARGIN,
+        }
     }
 
     pub fn null_safe(&self) -> bool {
-        let mut vl = match self.sd_player {
-            0 => self.vl_white,
-            _ => self.vl_black,
-        };
-        vl > pregen::NULL_OKAY_MARGIN
+        match self.sd_player {
+            0 => self.vl_white > pregen::NULL_SAFE_MARGIN,
+            _ => self.vl_black > pregen::NULL_SAFE_MARGIN,
+        }
     }
 
     pub fn null_move(&mut self) {
@@ -305,7 +303,7 @@ impl Engine {
             }
         };
         let mut index = index_opt.unwrap() - 1;
-        while index >= 0 && book.data[index][0] == lock {
+        while index > 0 && book.data[index][0] == lock {
             index -= 1;
         }
         let mut mvs = vec![];
@@ -313,9 +311,9 @@ impl Engine {
         let mut value = 0;
         let book = book::Book::get();
         while index < book.data.len() && book.data[index][0] == lock {
-            let mv = book.data[index][1];
+            let mut mv = book.data[index][1];
             if mirror_opt {
-                let mv = util::mirror_move(mv);
+                mv = util::mirror_move(mv);
             }
             if self.legal_move(mv) {
                 mvs.push(mv);
