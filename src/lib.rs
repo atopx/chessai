@@ -6,6 +6,7 @@ pub mod book;
 pub mod pregen;
 pub mod state;
 pub mod util;
+pub mod position;
 
 #[derive(Clone, Copy, Default)]
 pub struct Hash {

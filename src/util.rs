@@ -83,30 +83,6 @@ pub fn unsigned_right_shift(x: isize, y: isize) -> isize {
     (x >> (y & 0xf)) as isize
 }
 
-pub fn cord2uint8(cord: &str) -> isize {
-    let alphabet = cord.chars().nth(0).unwrap() as isize - 'a' as isize + 3;
-    let numeric = '9' as isize - cord.chars().nth(1).unwrap() as isize + 3;
-    numeric << 4 | alphabet
-}
-
-pub fn iccs2move(iccs: &str) -> isize {
-    let iccs = iccs.to_ascii_lowercase();
-    let src = cord2uint8(&iccs[..2]);
-    let dst = cord2uint8(&iccs[2..]);
-    (dst << 8 | src) as isize
-}
-
-pub fn move2iccs(mv: isize) -> String {
-    let src = src(mv);
-    let dst = dst(mv);
-    let mut iccs = String::new();
-    iccs.push((b'a' + file_x(src) as u8 - 3) as char);
-    iccs.push((b'9' - rank_y(src) as u8 + 3) as char);
-    iccs.push((b'a' + file_x(dst) as u8 - 3) as char);
-    iccs.push((b'9' - rank_y(dst) as u8 + 3) as char);
-    iccs
-}
-
 pub fn randf64(value: isize) -> f64 {
     let mut rng = rand::thread_rng();
     let num: f64 = rng.gen_range(0.0..1.0);
@@ -121,28 +97,6 @@ mod tests {
     fn test_unsigned_right_shift() {
         let t = unsigned_right_shift(50343, 30);
         assert_eq!(t, 3);
-    }
-
-    #[test]
-    fn test_move2iccs() {
-        let t = move2iccs(22375);
-        assert_eq!(t, "e6e7");
-    }
-
-    #[test]
-    fn test_iccs2move() {
-        let t = iccs2move("e6e7");
-        assert_eq!(t, 22375)
-    }
-
-    #[test]
-    fn test_iccs_moves() {
-        let mvs = vec![
-            "g3g4", "g6g5", "b0c2", "h7h0", "e3e4", "d9e8", "e1e2", "c6c5",
-        ];
-        for mv in mvs {
-            assert_eq!(move2iccs(iccs2move(&mv)), mv)
-        }
     }
 
     #[test]
