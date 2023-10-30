@@ -84,27 +84,27 @@ pub fn unsigned_right_shift(x: isize, y: isize) -> isize {
 }
 
 pub fn cord2uint8(cord: &str) -> isize {
-    let alphabet = cord.chars().nth(0).unwrap() as isize - 'A' as isize + 3;
+    let alphabet = cord.chars().nth(0).unwrap() as isize - 'a' as isize + 3;
     let numeric = '9' as isize - cord.chars().nth(1).unwrap() as isize + 3;
     numeric << 4 | alphabet
 }
 
 pub fn iccs2move(iccs: &str) -> isize {
-    let src = cord2uint8(&iccs[0..2]);
-    let dst = cord2uint8(&iccs[3..5]);
+    let iccs = iccs.to_ascii_lowercase();
+    let src = cord2uint8(&iccs[..2]);
+    let dst = cord2uint8(&iccs[2..]);
     (dst << 8 | src) as isize
 }
 
 pub fn move2iccs(mv: isize) -> String {
     let src = src(mv);
     let dst = dst(mv);
-    format!(
-        "{}{}-{}{}",
-        ((b'A' + file_x(src) as u8 - 3) as char),
-        ((b'9' - rank_y(src) as u8 + 3) as char),
-        ((b'A' + file_x(dst) as u8 - 3) as char),
-        ((b'9' - rank_y(dst) as u8 + 3) as char)
-    )
+    let mut iccs = String::new();
+    iccs.push((b'a' + file_x(src) as u8 - 3) as char);
+    iccs.push((b'9' - rank_y(src) as u8 + 3) as char);
+    iccs.push((b'a' + file_x(dst) as u8 - 3) as char);
+    iccs.push((b'9' - rank_y(dst) as u8 + 3) as char);
+    iccs
 }
 
 pub fn randf64(value: isize) -> f64 {
@@ -124,18 +124,23 @@ mod tests {
     }
 
     #[test]
-    fn test_movs_iccs() {
+    fn test_move2iccs() {
         let t = move2iccs(22375);
-        assert_eq!(t, "E6-E7");
+        assert_eq!(t, "e6e7");
+    }
+
+    #[test]
+    fn test_iccs2move() {
+        let t = iccs2move("e6e7");
+        assert_eq!(t, 22375)
     }
 
     #[test]
     fn test_iccs_moves() {
         let mvs = vec![
-            "g3-g4", "g6-g5", "b0-c2", "h7-h0", "e3-e4", "d9-e8", "e1-e2", "c6-c5",
+            "g3g4", "g6g5", "b0c2", "h7h0", "e3e4", "d9e8", "e1e2", "c6c5",
         ];
         for mv in mvs {
-            let mv = mv.to_uppercase();
             assert_eq!(move2iccs(iccs2move(&mv)), mv)
         }
     }
