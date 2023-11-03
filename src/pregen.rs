@@ -29,6 +29,17 @@ pub const PIECE_ROOK: isize = 4;
 pub const PIECE_CANNON: isize = 5;
 pub const PIECE_PAWN: isize = 6;
 
+pub const WINNER_WHITE: isize = 0;
+pub const WINNER_BLACK: isize = 1;
+pub const WINNER_TIE: isize = 2;
+pub const WINNER_3: isize = 3;
+
+pub enum Winner {
+    White, // 红方胜
+    Black, // 黑方胜
+    Tie,   // 和
+}
+
 pub fn from_char(c: char) -> Option<isize> {
     match c {
         'K' => Some(PIECE_KING),
@@ -44,7 +55,10 @@ pub fn from_char(c: char) -> Option<isize> {
     }
 }
 
-pub const FEN_PIECE: [char; 24] = [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', 'K', 'A', 'B', 'N', 'R', 'C', 'P', ' ', 'k', 'a', 'b', 'n', 'r', 'c', 'p', ' ']; 
+pub const FEN_PIECE: [char; 24] = [
+    ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', 'K', 'A', 'B', 'N', 'R', 'C', 'P', ' ', 'k', 'a', 'b',
+    'n', 'r', 'c', 'p', ' ',
+];
 
 pub const BROAD: [i8; 256] = [
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,

@@ -833,9 +833,13 @@ impl Engine {
         true
     }
 
-    pub fn winner(&mut self) -> isize {
+    pub fn winner(&mut self) -> Option<pregen::Winner> {
         if self.has_mate() {
-            return 1 - self.sd_player;
+            return match 1 - self.sd_player {
+                0 => Some(pregen::Winner::White),
+                1 => Some(pregen::Winner::Black),
+                _ => Some(pregen::Winner::Tie),
+            };
         };
         let pc = pregen::PIECE_KING + util::side_tag(self.sd_player);
         let mut mate = 0;
@@ -846,15 +850,23 @@ impl Engine {
             }
         }
         if mate == 0 {
-            return 1 - self.sd_player;
+            return match 1 - self.sd_player {
+                0 => Some(pregen::Winner::White),
+                1 => Some(pregen::Winner::Black),
+                _ => Some(pregen::Winner::Tie),
+            };
         }
         let mut vl_rep = self.rep_status(3);
         if vl_rep > 0 {
             vl_rep = self.rep_value(vl_rep);
             if -pregen::WIN_VALUE < vl_rep && vl_rep < pregen::WIN_VALUE as isize {
-                return 2;
+                return Some(pregen::Winner::Tie);
             }
-            return self.sd_player;
+            return match self.sd_player {
+                0 => Some(pregen::Winner::White),
+                1 => Some(pregen::Winner::Black),
+                _ => Some(pregen::Winner::Tie),
+            };
         }
         let mut has_material = false;
         for i in 0..self.squares.len() {
@@ -864,9 +876,9 @@ impl Engine {
             }
         }
         if !has_material {
-            return 2;
+            return Some(pregen::Winner::Tie);
         }
-        0
+        None
     }
 
     pub fn new_state(&mut self, hash: isize) -> MoveState {
