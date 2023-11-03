@@ -3,10 +3,10 @@ use std::time::{Duration, Instant};
 use self::state::{MoveState, Status};
 
 pub mod book;
+pub mod position;
 pub mod pregen;
 pub mod state;
 pub mod util;
-pub mod position;
 
 #[derive(Clone, Copy, Default)]
 pub struct Hash {
@@ -299,10 +299,10 @@ impl Engine {
             mirror_opt = true;
             lock = util::unsigned_right_shift(self.mirror().zobrist_lock, 1);
             index_opt = book.search(lock);
-            if index_opt.is_none() {
-                return 0;
-            }
         };
+        if index_opt.is_none() {
+            return 0;
+        }
         let mut index = index_opt.unwrap() - 1;
         while index > 0 && book.data[index][0] == lock {
             index -= 1;
@@ -310,27 +310,32 @@ impl Engine {
         let mut mvs = vec![];
         let mut vls = vec![];
         let mut value = 0;
-        let book = book::Book::get();
+        index += 1;
+
         while index < book.data.len() && book.data[index][0] == lock {
             let mut mv = book.data[index][1];
             if mirror_opt {
                 mv = util::mirror_move(mv);
             }
+
             if self.legal_move(mv) {
                 mvs.push(mv);
                 let vl = book.data[index][2];
                 vls.push(vl);
                 value += vl;
             }
+
             index += 1;
         }
         if value == 0 {
             return 0;
         };
+
         value = util::randf64(value) as isize;
-        for index in 0..mvs.len() {
-            value -= vls[index];
+        for i in 0..mvs.len() {
+            value -= vls[i];
             if value < 0 {
+                index = i;
                 break;
             }
         }
@@ -1337,6 +1342,15 @@ mod tests {
     }
 
     #[test]
+    fn test_engine_22842() {
+        let fen: &str = "rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C2C4/9/RNBAKABNR b";
+        let mut engine = Engine::new();
+        engine.from_fen(fen);
+        let mv = engine.search_main(64, 1000);
+        assert_eq!(mv, 22842);
+    }
+
+    #[test]
     fn test_engine_26215() {
         let fen: &str = "9/2Cca4/3k1C3/4P1p2/4N1b2/4R1r2/4c1n2/3p1n3/2rNK4/9 w";
         let mut engine = Engine::new();
@@ -1353,7 +1367,7 @@ mod tests {
         let mv = engine.search_main(64, 1000);
         assert_eq!(mv, 22326);
     }
-    
+
     #[test]
     fn test_engine_22985() {
         let fen: &str = "4kab2/4a4/8b/9/9/9/9/9/9/4K1R2 w - - 0 1";
