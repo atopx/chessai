@@ -184,11 +184,11 @@ impl Engine {
     }
 
     pub fn evaluate(&self) -> isize {
-        let mut vl = match self.sd_player {
-            0 => self.vl_white - self.vl_black,
-            _ => self.vl_black - self.vl_white,
+        let vl = if self.sd_player == 0 {
+            (self.vl_white - self.vl_black) + pregen::ADVANCED_VALUE
+        } else {
+            (self.vl_black - self.vl_white) + pregen::ADVANCED_VALUE
         };
-        vl += pregen::ADVANCED_VALUE;
         if vl == self.draw_value() {
             vl - 1
         } else {
@@ -601,17 +601,13 @@ impl Engine {
         let opp_side = util::opp_side_tag(self.sd_player);
         let mut mvs = vec![];
         let mut vls = vec![];
-        // let mut vls_is_none = true;
         if vls_opt.is_some() {
-            // for v in vls_opt.clone().unwrap().iter() {
-            // vls.push(*v);
             vls = vls_opt.clone().unwrap().to_vec();
-            // vls_is_none = false;
-            // }
         }
 
         for sq_src in 0..self.squares.len() {
             let pc_src = self.squares[sq_src];
+
             if pc_src & self_side == 0 {
                 continue;
             }
@@ -794,7 +790,7 @@ impl Engine {
                             }
                         } else if pc_dst & opp_side != 0 {
                             mvs.push(util::merge(sq_src as isize, sq_dst));
-                            vls.push(pregen::MVV_LVA(pc_dst, 4));
+                            vls.push(pregen::MVV_LVA(pc_dst, 2));
                         };
                     }
 
@@ -807,9 +803,9 @@ impl Engine {
                                     if pc_dst & self_side == 0 {
                                         mvs.push(util::merge(sq_src as isize, sq_dst));
                                     }
-                                } else {
+                                } else if pc_dst & opp_side != 0 {
                                     mvs.push(util::merge(sq_src as isize, sq_dst));
-                                    vls.push(pregen::MVV_LVA(pc_dst, 4));
+                                    vls.push(pregen::MVV_LVA(pc_dst, 2));
                                 }
                             }
                         }
@@ -1047,7 +1043,6 @@ impl Engine {
 
     pub fn set_best_move(&mut self, mv: isize, depth: isize) {
         let idx = self.history_index(mv) as usize;
-
         self.history[idx] += depth * depth;
         let killer = self.killer_table[self.distance as usize];
         if killer[0] != mv {
@@ -1078,7 +1073,7 @@ impl Engine {
 
         if self.in_check() {
             (mvs, _) = self.generate_mvs(None);
-            for mv in mvs.iter() {
+            for mv in mvs.iter_mut() {
                 vls.push(self.history[self.history_index(*mv) as usize]);
             }
             util::shell_sort(&mut mvs, &mut vls);
@@ -1090,14 +1085,10 @@ impl Engine {
                     return vl;
                 };
                 vl_best = vl;
-                if vl > vl_alpha {
-                    vl_alpha = vl;
-                }
+                vl_alpha = vl_alpha.max(vl);
             };
 
-            let (mt, vt) = self.generate_mvs(Some(vls));
-            mvs = mt;
-            vls = vt;
+            (mvs, vls) = self.generate_mvs(Some(vls));
             util::shell_sort(&mut mvs, &mut vls);
             for i in 0..mvs.len() {
                 if vls[i] < 10
@@ -1120,17 +1111,15 @@ impl Engine {
                     return vl;
                 }
                 vl_best = vl;
-                if vl > vl_alpha {
-                    vl_alpha = vl;
-                };
+                vl_alpha = vl_alpha.max(vl);
             }
         }
 
         if vl_best == -pregen::MATE_VALUE {
-            return self.mate_value();
+            self.mate_value()
+        } else {
+            vl_best
         }
-
-        return vl_best;
     }
 
     pub fn search_full(
@@ -1198,7 +1187,7 @@ impl Engine {
             };
 
             if vl_best == -pregen::MATE_VALUE {
-                vl = -self.search_full(-vl_best, -vl_alpha, new_depth, false);
+                vl = -self.search_full(-vl_beta, -vl_alpha, new_depth, false);
             } else {
                 vl = -self.search_full(-vl_alpha - 1, -vl_alpha, new_depth, false);
                 if vl_alpha < vl && vl < vl_beta {
@@ -1369,6 +1358,15 @@ mod tests {
         engine.from_fen(fen);
         let mv = engine.search_main(64, 1000);
         assert_eq!(mv, 26215);
+    }
+
+    #[test]
+    fn test_engine_19146() {
+        let fen: &str = "RKBAKABR1/9/1C2C1K2/P1P1P3P/6P2/9/p1p1p1p1p/1c4k1c/9/rkbakabr1 b";
+        let mut engine = Engine::new();
+        engine.from_fen(fen);
+        let mv = engine.search_main(64, 1000);
+        assert_eq!(mv, 19146);
     }
 
     #[test]
