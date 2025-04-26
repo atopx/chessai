@@ -1,9 +1,10 @@
-use crate::util::{file_x, rank_y};
+use crate::util::file_x;
+use crate::util::rank_y;
 
 pub fn cord2uint8(cord: &str) -> isize {
-    let alphabet = cord.chars().nth(0).unwrap() as isize - 'a' as isize + 3;
+    let alphabet = cord.chars().next().unwrap() as isize - 'a' as isize + 3;
     let numeric = '9' as isize - cord.chars().nth(1).unwrap() as isize + 3;
-    numeric << 4 | alphabet
+    (numeric << 4) | alphabet
 }
 
 pub fn pos2iccs(src_row: usize, src_col: usize, dst_row: usize, dst_col: usize) -> String {
@@ -38,7 +39,7 @@ pub fn iccs2move(iccs: &str) -> isize {
     let iccs = iccs.to_ascii_lowercase();
     let src = cord2uint8(&iccs[..2]);
     let dst = cord2uint8(&iccs[2..]);
-    (dst << 8 | src) as isize
+    (dst << 8) | src
 }
 
 pub fn move2iccs(mv: isize) -> String {
@@ -88,11 +89,9 @@ mod tests {
 
     #[test]
     fn test_iccs_moves() {
-        let mvs = vec![
-            "g3g4", "g6g5", "b0c2", "h7h0", "e3e4", "d9e8", "e1e2", "c6c5",
-        ];
+        let mvs = vec!["g3g4", "g6g5", "b0c2", "h7h0", "e3e4", "d9e8", "e1e2", "c6c5"];
         for mv in mvs {
-            assert_eq!(move2iccs(iccs2move(&mv)), mv)
+            assert_eq!(move2iccs(iccs2move(mv)), mv)
         }
     }
 }

@@ -1,6 +1,8 @@
-use std::time::{Duration, Instant};
+use std::time::Duration;
+use std::time::Instant;
 
-use self::state::{MoveState, Status};
+use self::state::MoveState;
+use self::state::Status;
 
 pub mod book;
 pub mod position;
@@ -35,6 +37,10 @@ pub struct Engine {
     pub killer_table: Vec<[isize; 2]>,
     pub result: isize,
     pub all_nodes: isize,
+}
+
+impl Default for Engine {
+    fn default() -> Self { Self::new() }
 }
 
 impl Engine {
@@ -80,22 +86,20 @@ impl Engine {
                 if y > pregen::RANK_BOTTOM {
                     break;
                 }
-            } else if c >= '1' && c <= '9' {
+            } else if ('1'..='9').contains(&c) {
                 x += (c as u8 - b'0') as isize;
-            } else if c >= 'A' && c <= 'Z' {
+            } else if c.is_ascii_uppercase() {
                 if x <= pregen::FILE_RIGHT {
                     if let Some(pt) = pregen::from_char(c) {
                         self.add_piece(util::coord_xy(x, y), pt + 8, pregen::PieceAction::ADD);
                     };
                     x += 1;
                 }
-            } else if c >= 'a' && c <= 'z' {
-                if x <= pregen::FILE_RIGHT {
-                    if let Some(pt) = pregen::from_char((c as u8 + b'A' - b'a') as char) {
-                        self.add_piece(util::coord_xy(x, y), pt + 16, pregen::PieceAction::ADD);
-                    }
-                    x += 1;
+            } else if c.is_ascii_lowercase() && x <= pregen::FILE_RIGHT {
+                if let Some(pt) = pregen::from_char((c as u8 + b'A' - b'a') as char) {
+                    self.add_piece(util::coord_xy(x, y), pt + 16, pregen::PieceAction::ADD);
                 }
+                x += 1;
             }
             index += 1;
             if index == fen.len() {
@@ -109,11 +113,7 @@ impl Engine {
             self.set_irrev();
             return;
         }
-        let player = if fen.chars().nth(index).unwrap() == 'b' {
-            0
-        } else {
-            1
-        };
+        let player = if fen.chars().nth(index).unwrap() == 'b' { 0 } else { 1 };
         if self.sd_player == player {
             self.change_side();
         }
@@ -168,13 +168,9 @@ impl Engine {
         self.chk_list = vec![self.checked()];
     }
 
-    pub fn mate_value(&self) -> isize {
-        self.distance - pregen::MATE_VALUE
-    }
+    pub fn mate_value(&self) -> isize { self.distance - pregen::MATE_VALUE }
 
-    pub fn ban_value(&self) -> isize {
-        self.distance - pregen::BAN_VALUE
-    }
+    pub fn ban_value(&self) -> isize { self.distance - pregen::BAN_VALUE }
 
     pub fn draw_value(&self) -> isize {
         match self.distance & 1 {
@@ -189,11 +185,7 @@ impl Engine {
         } else {
             (self.vl_black - self.vl_white) + pregen::ADVANCED_VALUE
         };
-        if vl == self.draw_value() {
-            vl - 1
-        } else {
-            vl
-        }
+        if vl == self.draw_value() { vl - 1 } else { vl }
     }
 
     pub fn null_okay(&self) -> bool {
@@ -228,21 +220,17 @@ impl Engine {
         self.mv_list.pop().unwrap();
     }
 
-    pub fn in_check(&self) -> bool {
-        *self.chk_list.last().unwrap()
-    }
+    pub fn in_check(&self) -> bool { *self.chk_list.last().unwrap() }
 
-    pub fn captured(&self) -> bool {
-        *self.pc_list.last().unwrap() > 0
-    }
+    pub fn captured(&self) -> bool { *self.pc_list.last().unwrap() > 0 }
 
     pub fn rep_value(&self, vl_rep: isize) -> isize {
         let mut vl: isize = 0;
         if vl_rep & 2 != 0 {
-            vl = self.ban_value() as isize;
+            vl = self.ban_value();
         };
         if vl_rep & 4 != 0 {
-            vl -= self.ban_value() as isize;
+            vl -= self.ban_value();
         };
         match vl {
             0 => self.draw_value(),
@@ -339,39 +327,37 @@ impl Engine {
                 break;
             }
         }
-        return mvs[index];
+        mvs[index]
     }
 
     pub fn legal_move(&self, mv: isize) -> bool {
-        let sq_src = util::src(mv) as isize;
+        let sq_src = util::src(mv);
         let pc_src = self.squares[sq_src as usize];
 
-        let self_side = util::side_tag(self.sd_player as isize) as isize;
+        let self_side = util::side_tag(self.sd_player);
         if pc_src & self_side == 0 {
             return false;
         }
-        let sq_dst = util::dst(mv) as isize;
+        let sq_dst = util::dst(mv);
         let pc_dst = self.squares[sq_dst as usize];
         if pc_dst & self_side != 0 {
             return false;
         }
 
         match pc_src - self_side {
-            pregen::PIECE_KING => pregen::IN_FORT(sq_dst) && pregen::KING_SPAN(sq_src, sq_dst),
-            pregen::PIECE_ADVISOR => {
-                pregen::IN_FORT(sq_dst) && pregen::ADVISOR_SPAN(sq_src, sq_dst)
-            }
+            pregen::PIECE_KING => pregen::in_fort(sq_dst) && pregen::king_span(sq_src, sq_dst),
+            pregen::PIECE_ADVISOR => pregen::in_fort(sq_dst) && pregen::advisor_span(sq_src, sq_dst),
             pregen::PIECE_BISHOP => {
-                pregen::SAME_HALF(sq_src, sq_dst)
-                    && pregen::BISHOP_SPAN(sq_src, sq_dst)
-                    && self.squares[pregen::BISHOP_PIN(sq_src, sq_dst)] == 0
+                pregen::same_half(sq_src, sq_dst)
+                    && pregen::bishop_span(sq_src, sq_dst)
+                    && self.squares[pregen::bishop_pin(sq_src, sq_dst)] == 0
             }
             pregen::PIECE_KNIGHT => {
-                let pin = pregen::KNIGHT_PIN(sq_src, sq_dst);
+                let pin = pregen::knight_pin(sq_src, sq_dst);
                 pin != sq_src && self.squares[pin as usize] == 0
             }
             pregen::PIECE_PAWN => {
-                if pregen::AWAY_HALF(sq_dst, self.sd_player)
+                if pregen::away_half(sq_dst, self.sd_player)
                     && (sq_dst == sq_src - 1 || sq_dst == sq_src + 1)
                 {
                     true
@@ -380,18 +366,10 @@ impl Engine {
                 }
             }
             pregen::PIECE_ROOK | pregen::PIECE_CANNON => {
-                let delta = if pregen::SAME_RANK(sq_src, sq_dst) {
-                    if sq_src > sq_dst {
-                        -1
-                    } else {
-                        1
-                    }
-                } else if pregen::SAME_FILE(sq_src, sq_dst) {
-                    if sq_src > sq_dst {
-                        -16
-                    } else {
-                        16
-                    }
+                let delta = if pregen::same_rank(sq_src, sq_dst) {
+                    if sq_src > sq_dst { -1 } else { 1 }
+                } else if pregen::same_file(sq_src, sq_dst) {
+                    if sq_src > sq_dst { -16 } else { 16 }
                 } else {
                     return false;
                 };
@@ -399,7 +377,7 @@ impl Engine {
                 let mut pin = sq_src + delta;
 
                 while pin != sq_dst && self.squares[pin as usize] == 0 {
-                    pin = pin + delta;
+                    pin += delta;
                 }
 
                 if pin == sq_dst {
@@ -409,11 +387,11 @@ impl Engine {
                 if pc_dst == 0 || pc_src - self_side != pregen::PIECE_CANNON {
                     return false;
                 }
-                pin = pin + delta;
+                pin += delta;
                 while pin != sq_dst && self.squares[pin as usize] == 0 {
-                    pin = pin + delta;
+                    pin += delta;
                 }
-                return pin == sq_dst;
+                pin == sq_dst
             }
             _ => false,
         }
@@ -425,11 +403,7 @@ impl Engine {
         for i in 0..mirror.squares.len() {
             let pc = self.squares[i];
             if pc > 0 {
-                mirror.add_piece(
-                    util::mirror_square(i as isize) as isize,
-                    pc,
-                    pregen::PieceAction::ADD,
-                )
+                mirror.add_piece(util::mirror_square(i as isize), pc, pregen::PieceAction::ADD)
             }
         }
 
@@ -459,15 +433,14 @@ impl Engine {
 
         if self.checked() {
             self.undo_move_piece();
-            return false;
+            false
+        } else {
+            self.key_list.push(self.zobrist_key);
+            self.change_side();
+            self.chk_list.push(self.checked());
+            self.distance += 1;
+            true
         }
-
-        self.key_list.push(self.zobrist_key);
-        self.change_side();
-        self.chk_list.push(self.checked());
-        self.distance += 1;
-
-        return true;
     }
 
     pub fn undo_make_move(&mut self) {
@@ -556,18 +529,16 @@ impl Engine {
                 let side_knight = pregen::PIECE_KNIGHT + opp_side;
 
                 for n in 0..2usize {
-                    if self.squares[(sq_src + pregen::KNIGHT_CHECK_DELTA[i][n]) as usize]
-                        == side_knight
-                    {
+                    if self.squares[(sq_src + pregen::KNIGHT_CHECK_DELTA[i][n]) as usize] == side_knight {
                         return true;
                     }
                 }
             }
 
             for i in 0..4usize {
-                let delta = pregen::KING_DELTA[i] as isize;
+                let delta = pregen::KING_DELTA[i];
                 let mut sq_dst = sq_src + delta;
-                while pregen::IN_BROAD(sq_dst) {
+                while pregen::in_broad(sq_dst) {
                     let pc_dst = self.squares[sq_dst as usize];
                     if pc_dst > 0 {
                         if pc_dst == pregen::PIECE_ROOK + opp_side
@@ -580,7 +551,7 @@ impl Engine {
                     sq_dst += delta;
                 }
                 sq_dst += delta;
-                while pregen::IN_BROAD(sq_dst) {
+                while pregen::in_broad(sq_dst) {
                     let pc_dst = self.squares[sq_dst as usize];
                     if pc_dst > 0 {
                         if pc_dst == pregen::PIECE_CANNON + opp_side {
@@ -593,7 +564,7 @@ impl Engine {
             }
             return false;
         }
-        return false;
+        false
     }
 
     pub fn generate_mvs(&self, vls_opt: Option<Vec<isize>>) -> (Vec<isize>, Vec<isize>) {
@@ -617,7 +588,7 @@ impl Engine {
                     for i in 0..4usize {
                         let sq_dst = sq_src as isize + pregen::KING_DELTA[i];
 
-                        if !pregen::IN_FORT(sq_dst) {
+                        if !pregen::in_fort(sq_dst) {
                             continue;
                         }
                         let pc_dst = self.squares[sq_dst as usize];
@@ -626,7 +597,7 @@ impl Engine {
                             Some(_) => {
                                 if pc_dst & opp_side != 0 {
                                     mvs.push(util::merge(sq_src as isize, sq_dst));
-                                    vls.push(pregen::MVV_LVA(pc_dst, 5));
+                                    vls.push(pregen::mvv_lva(pc_dst, 5));
                                 }
                             }
                             None => {
@@ -641,7 +612,7 @@ impl Engine {
                     for i in 0..4usize {
                         let sq_dst = sq_src as isize + pregen::ADVISOR_DELTA[i];
 
-                        if !pregen::IN_FORT(sq_dst) {
+                        if !pregen::in_fort(sq_dst) {
                             continue;
                         }
                         let pc_dst = self.squares[sq_dst as usize];
@@ -650,7 +621,7 @@ impl Engine {
                             Some(_) => {
                                 if pc_dst & opp_side != 0 {
                                     mvs.push(util::merge(sq_src as isize, sq_dst));
-                                    vls.push(pregen::MVV_LVA(pc_dst, 1));
+                                    vls.push(pregen::mvv_lva(pc_dst, 1));
                                 }
                             }
                             None => {
@@ -665,20 +636,20 @@ impl Engine {
                     for i in 0..4usize {
                         let mut sq_dst = sq_src as isize + pregen::ADVISOR_DELTA[i];
 
-                        if !(pregen::IN_BROAD(sq_dst)
-                            && pregen::HOME_HALF(sq_dst, self.sd_player)
+                        if !(pregen::in_broad(sq_dst)
+                            && pregen::home_half(sq_dst, self.sd_player)
                             && self.squares[sq_dst as usize] == 0)
                         {
                             continue;
                         }
-                        sq_dst = sq_dst + pregen::ADVISOR_DELTA[i];
+                        sq_dst += pregen::ADVISOR_DELTA[i];
                         let pc_dst = self.squares[sq_dst as usize];
 
                         match vls_opt {
                             Some(_) => {
                                 if pc_dst & opp_side != 0 {
                                     mvs.push(util::merge(sq_src as isize, sq_dst));
-                                    vls.push(pregen::MVV_LVA(pc_dst, 1));
+                                    vls.push(pregen::mvv_lva(pc_dst, 1));
                                 }
                             }
                             None => {
@@ -698,7 +669,7 @@ impl Engine {
                         }
                         for j in 0..2usize {
                             sq_dst = sq_src.saturating_add_signed(pregen::KNIGHT_DELTA[i][j]);
-                            if !pregen::IN_BROAD(sq_dst as isize) {
+                            if !pregen::in_broad(sq_dst as isize) {
                                 continue;
                             }
                             let pc_dst = self.squares[sq_dst];
@@ -706,7 +677,7 @@ impl Engine {
                                 Some(_) => {
                                     if pc_dst & opp_side != 0 {
                                         mvs.push(util::merge(sq_src as isize, sq_dst as isize));
-                                        vls.push(pregen::MVV_LVA(pc_dst, 1));
+                                        vls.push(pregen::mvv_lva(pc_dst, 1));
                                     }
                                 }
                                 None => {
@@ -723,7 +694,7 @@ impl Engine {
                         let delta = pregen::KING_DELTA[i];
                         let mut sq_dst = sq_src as isize + delta;
 
-                        while pregen::IN_BROAD(sq_dst) {
+                        while pregen::in_broad(sq_dst) {
                             let pc_dst = self.squares[sq_dst as usize];
                             if pc_dst == 0 {
                                 if vls_opt.is_none() {
@@ -733,8 +704,8 @@ impl Engine {
                                 if pc_dst & opp_side != 0 {
                                     mvs.push(util::merge(sq_src as isize, sq_dst));
 
-                                    if let Some(_) = vls_opt {
-                                        vls.push(pregen::MVV_LVA(pc_dst, 4));
+                                    if vls_opt.is_some() {
+                                        vls.push(pregen::mvv_lva(pc_dst, 4));
                                     };
                                 };
                                 break;
@@ -749,7 +720,7 @@ impl Engine {
                         let mut sq_dst = sq_src as isize + delta;
                         // i=1 delta= -1 sq_dst= 52 sq_src= 53
 
-                        while pregen::IN_BROAD(sq_dst) {
+                        while pregen::in_broad(sq_dst) {
                             let pc_dst = self.squares[sq_dst as usize];
                             if pc_dst == 0 {
                                 if vls_opt.is_none() {
@@ -760,16 +731,16 @@ impl Engine {
                             };
                             sq_dst += delta;
                         }
-                        sq_dst = sq_dst + delta;
+                        sq_dst += delta;
 
-                        while pregen::IN_BROAD(sq_dst) {
+                        while pregen::in_broad(sq_dst) {
                             let pc_dst = self.squares[sq_dst as usize];
                             if pc_dst > 0 {
                                 if pc_dst & opp_side != 0 {
                                     mvs.push(util::merge(sq_src as isize, sq_dst));
 
-                                    if let Some(_) = vls_opt {
-                                        vls.push(pregen::MVV_LVA(pc_dst, 4));
+                                    if vls_opt.is_some() {
+                                        vls.push(pregen::mvv_lva(pc_dst, 4));
                                     };
                                 }
                                 break;
@@ -781,7 +752,7 @@ impl Engine {
                 pregen::PIECE_PAWN => {
                     let mut sq_dst = util::square_forward(sq_src as isize, self.sd_player);
 
-                    if pregen::IN_BROAD(sq_dst) {
+                    if pregen::in_broad(sq_dst) {
                         let pc_dst = self.squares[sq_dst as usize];
 
                         if vls_opt.is_none() {
@@ -790,14 +761,14 @@ impl Engine {
                             }
                         } else if pc_dst & opp_side != 0 {
                             mvs.push(util::merge(sq_src as isize, sq_dst));
-                            vls.push(pregen::MVV_LVA(pc_dst, 2));
+                            vls.push(pregen::mvv_lva(pc_dst, 2));
                         };
                     }
 
-                    if pregen::AWAY_HALF(sq_src as isize, self.sd_player) {
+                    if pregen::away_half(sq_src as isize, self.sd_player) {
                         for delta in [-1, 1] {
                             sq_dst = sq_src as isize + delta;
-                            if pregen::IN_BROAD(sq_dst) {
+                            if pregen::in_broad(sq_dst) {
                                 let pc_dst = self.squares[sq_dst as usize];
                                 if vls_opt.is_none() {
                                     if pc_dst & self_side == 0 {
@@ -805,7 +776,7 @@ impl Engine {
                                     }
                                 } else if pc_dst & opp_side != 0 {
                                     mvs.push(util::merge(sq_src as isize, sq_dst));
-                                    vls.push(pregen::MVV_LVA(pc_dst, 2));
+                                    vls.push(pregen::mvv_lva(pc_dst, 2));
                                 }
                             }
                         }
@@ -855,7 +826,7 @@ impl Engine {
         let mut vl_rep = self.rep_status(3);
         if vl_rep > 0 {
             vl_rep = self.rep_value(vl_rep);
-            if -pregen::WIN_VALUE < vl_rep && vl_rep < pregen::WIN_VALUE as isize {
+            if -pregen::WIN_VALUE < vl_rep && vl_rep < pregen::WIN_VALUE {
                 return Some(pregen::Winner::Tie);
             }
             return match self.sd_player {
@@ -866,7 +837,7 @@ impl Engine {
         }
         let mut has_material = false;
         for i in 0..self.squares.len() {
-            if pregen::IN_BROAD(i as isize) && self.squares[i] & 7 > 2 {
+            if pregen::in_broad(i as isize) && self.squares[i] & 7 > 2 {
                 has_material = true;
                 break;
             }
@@ -891,9 +862,7 @@ impl Engine {
                 if mv == state.hash {
                     state.vls.push(0x7fffffff);
                 } else {
-                    state
-                        .vls
-                        .push(self.history[self.history_index(mv) as usize])
+                    state.vls.push(self.history[self.history_index(mv) as usize])
                 };
                 util::shell_sort(&mut state.mvs, &mut state.vls);
                 state.signle = state.mvs.len() == 1
@@ -906,15 +875,15 @@ impl Engine {
     }
 
     pub fn next_state(&mut self, state: &mut MoveState) -> isize {
-        if state.phase == Status::HASH {
-            state.phase = Status::KILLER_FIRST;
+        if state.phase == Status::Hash {
+            state.phase = Status::KillerFirst;
             if state.hash > 0 {
                 return state.hash;
             }
         };
 
-        if state.phase == Status::KILLER_FIRST {
-            state.phase = Status::KILLER_SECOND;
+        if state.phase == Status::KillerFirst {
+            state.phase = Status::KillerSecond;
             if state.killer_first != state.hash
                 && state.killer_first > 0
                 && self.legal_move(state.killer_first)
@@ -923,8 +892,8 @@ impl Engine {
             }
         };
 
-        if state.phase == Status::KILLER_SECOND {
-            state.phase = Status::GEN_MOVES;
+        if state.phase == Status::KillerSecond {
+            state.phase = Status::GenMoves;
             if state.killer_second != state.hash
                 && state.killer_second > 0
                 && self.legal_move(state.killer_second)
@@ -933,16 +902,14 @@ impl Engine {
             }
         };
 
-        if state.phase == Status::GEN_MOVES {
+        if state.phase == Status::GenMoves {
             state.phase = Status::REST;
 
             let (mvs, _) = self.generate_mvs(None);
             state.mvs = mvs;
             state.vls = vec![];
             for mv in state.mvs.iter() {
-                state
-                    .vls
-                    .push(self.history[self.history_index(*mv) as usize]);
+                state.vls.push(self.history[self.history_index(*mv) as usize]);
             }
             util::shell_sort(&mut state.mvs, &mut state.vls);
             state.index = 0;
@@ -958,13 +925,7 @@ impl Engine {
         0
     }
 
-    pub fn probe_hash(
-        &self,
-        vl_alpha: isize,
-        vl_beta: isize,
-        depth: isize,
-        mvs: &mut Vec<isize>,
-    ) -> isize {
+    pub fn probe_hash(&self, vl_alpha: isize, vl_beta: isize, depth: isize, mvs: &mut [isize]) -> isize {
         let hash_idx = (self.zobrist_key & self.mask) as usize;
         let mut hash = self.hash_table[hash_idx]; // todo set hash???
         if hash.zobrist_lock != self.zobrist_key {
@@ -979,13 +940,13 @@ impl Engine {
             if hash.vl <= pregen::BAN_VALUE {
                 return -pregen::MATE_VALUE;
             }
-            hash.vl = hash.vl - self.distance;
+            hash.vl -= self.distance;
             mate = true;
         } else if hash.vl < -pregen::WIN_VALUE {
             if hash.vl > -pregen::BAN_VALUE {
                 return -pregen::MATE_VALUE;
             };
-            hash.vl = hash.vl + self.distance;
+            hash.vl += self.distance;
             mate = true;
         } else if hash.vl == self.draw_value() {
             return -pregen::MATE_VALUE;
@@ -1008,7 +969,7 @@ impl Engine {
             }
             return -pregen::MATE_VALUE;
         }
-        return hash.vl;
+        hash.vl
     }
 
     pub fn record_hash(&mut self, flag: isize, vl: isize, depth: isize, mv: isize) {
@@ -1025,12 +986,12 @@ impl Engine {
                 return;
             };
 
-            hash.vl = hash.vl + self.distance;
+            hash.vl += self.distance;
         } else if vl < -pregen::WIN_VALUE {
             if mv == 0 && vl <= pregen::BAN_VALUE {
                 return;
             }
-            hash.vl = hash.vl - self.distance;
+            hash.vl -= self.distance;
         } else if vl == self.draw_value() && mv == 0 {
             return;
         } else {
@@ -1091,17 +1052,15 @@ impl Engine {
             (mvs, vls) = self.generate_mvs(Some(vls));
             util::shell_sort(&mut mvs, &mut vls);
             for i in 0..mvs.len() {
-                if vls[i] < 10
-                    || (vls[i] < 20 && pregen::HOME_HALF(util::dst(mvs[i]), self.sd_player))
-                {
+                if vls[i] < 10 || (vls[i] < 20 && pregen::home_half(util::dst(mvs[i]), self.sd_player)) {
                     mvs = mvs[0..i].to_vec();
                     break;
                 }
             }
         };
 
-        for i in 0..mvs.len() {
-            if !self.make_move(mvs[i]) {
+        for mv in mvs {
+            if !self.make_move(mv) {
                 continue;
             }
             vl = -self.search_pruning(-vl_beta, -vl_alpha);
@@ -1115,26 +1074,18 @@ impl Engine {
             }
         }
 
-        if vl_best == -pregen::MATE_VALUE {
-            self.mate_value()
-        } else {
-            vl_best
-        }
+        if vl_best == -pregen::MATE_VALUE { self.mate_value() } else { vl_best }
     }
 
     pub fn search_full(
-        &mut self,
-        mut vl_alpha: isize,
-        vl_beta: isize,
-        depth: isize,
-        not_null: bool,
+        &mut self, mut vl_alpha: isize, vl_beta: isize, depth: isize, not_null: bool,
     ) -> isize {
         if depth <= 0 {
             return self.search_pruning(vl_alpha, vl_beta);
         };
 
         self.all_nodes += 1;
-        let mut vl = self.mate_value() as isize;
+        let mut vl = self.mate_value();
         if vl > vl_beta {
             return vl;
         };
@@ -1160,8 +1111,7 @@ impl Engine {
             self.undo_null_move();
             if vl >= vl_beta
                 && (self.null_safe()
-                    || self.search_full(vl_alpha, vl_beta, depth - pregen::NULL_DEPTH, true)
-                        >= vl_beta)
+                    || self.search_full(vl_alpha, vl_beta, depth - pregen::NULL_DEPTH, true) >= vl_beta)
             {
                 return vl;
             }
@@ -1218,7 +1168,7 @@ impl Engine {
         if mv_best > 0 {
             self.set_best_move(mv_best, depth);
         };
-        return vl_best;
+        vl_best
     }
 
     pub fn search_root(&mut self, depth: isize) -> isize {
@@ -1256,9 +1206,8 @@ impl Engine {
                 vl_best = vl;
                 self.result = mv;
                 if vl_best > -pregen::WIN_VALUE && vl_best < pregen::WIN_VALUE {
-                    vl_best += (util::randf64(pregen::RANDOMNESS)
-                        - util::randf64(pregen::RANDOMNESS))
-                        as isize;
+                    vl_best +=
+                        (util::randf64(pregen::RANDOMNESS) - util::randf64(pregen::RANDOMNESS)) as isize;
                     if vl_best == self.draw_value() {
                         vl_best -= 1;
                     }
@@ -1266,7 +1215,7 @@ impl Engine {
             }
         }
         self.set_best_move(self.result, depth);
-        return vl_best;
+        vl_best
     }
 
     pub fn search_unique(&mut self, vl_beta: isize, depth: isize) -> bool {
@@ -1291,7 +1240,7 @@ impl Engine {
                 return false;
             }
         }
-        return true;
+        true
     }
 
     pub fn search_main(&mut self, depth: isize, millis: u64) -> isize {
@@ -1319,14 +1268,14 @@ impl Engine {
             if Instant::now() - start >= millis {
                 break;
             }
-            if vl > pregen::WIN_VALUE || vl < -pregen::WIN_VALUE {
+            if !(-pregen::WIN_VALUE..=pregen::WIN_VALUE).contains(&vl) {
                 break;
             };
             if self.search_unique(1 - pregen::WIN_VALUE, i) {
                 break;
             };
         }
-        return self.result;
+        self.result
     }
 }
 

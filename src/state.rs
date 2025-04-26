@@ -1,9 +1,9 @@
 #[derive(PartialEq, Debug)]
 pub enum Status {
-    HASH = 0,
-    KILLER_FIRST = 1,
-    KILLER_SECOND = 2,
-    GEN_MOVES = 3,
+    Hash = 0,
+    KillerFirst = 1,
+    KillerSecond = 2,
+    GenMoves = 3,
     REST = 4,
 }
 
@@ -29,7 +29,7 @@ impl MoveState {
             hash,
             killer_first: 0,
             killer_second: 0,
-            phase: Status::HASH,
+            phase: Status::Hash,
             signle: false,
         }
     }
