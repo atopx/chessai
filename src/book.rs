@@ -1,5 +1,7 @@
-use std::fs::{self, File};
-use std::io::{BufRead, BufReader, BufWriter};
+use std::fs::File;
+use std::io::BufRead;
+use std::io::BufReader;
+use std::io::BufWriter;
 use std::str::FromStr;
 use std::sync::OnceLock;
 
@@ -13,9 +15,7 @@ impl Book {
     pub fn get() -> &'static Book {
         BOOK.get_or_init(|| {
             let mut reader = BufReader::new(File::open("book.dat").unwrap());
-            Book {
-                data: bincode::deserialize_from(&mut reader).unwrap(),
-            }
+            Book { data: bincode::deserialize_from(&mut reader).unwrap() }
         })
     }
 
@@ -27,15 +27,13 @@ impl Book {
         while low <= hig {
             let mid = (low + hig) >> 1;
             let value = self.data[mid as usize][0];
-            if value < vl {
-                low = mid + 1
-            } else if value > vl {
-                hig = mid - 1
-            } else {
-                return Some(mid as usize);
+            match value.cmp(&vl) {
+                std::cmp::Ordering::Less => low = mid + 1,
+                std::cmp::Ordering::Equal => return Some(mid as usize),
+                std::cmp::Ordering::Greater => hig = mid - 1,
             }
         }
-        return None;
+        None
     }
 }
 
@@ -44,7 +42,7 @@ impl Book {
 /// 509427,33955,1
 /// 1435796,50371,2
 pub fn builder(input_file: &str, output_file: Option<String>) {
-    let input = fs::File::open(input_file).unwrap();
+    let input = File::open(input_file).unwrap();
     let mut book: Vec<[isize; 3]> = Vec::new();
     let buffered = BufReader::new(input);
     for line in buffered.lines() {
@@ -57,8 +55,8 @@ pub fn builder(input_file: &str, output_file: Option<String>) {
         }
     }
     let mut writer = match output_file {
-        Some(out) => BufWriter::new(fs::File::create(out).unwrap()),
-        None => BufWriter::new(fs::File::create("book.dat").unwrap()),
+        Some(out) => BufWriter::new(File::create(out).unwrap()),
+        None => BufWriter::new(File::create("book.dat").unwrap()),
     };
     bincode::serialize_into(&mut writer, &book).unwrap();
     println!("success, write {} pieces of `book.dat`", book.len());
