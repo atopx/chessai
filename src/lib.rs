@@ -481,8 +481,7 @@ impl Engine {
             pregen::PieceAction::DEL => 0,
             pregen::PieceAction::ADD => pc,
         };
-
-        let mut adjust: isize = 0;
+        let mut adjust = 0;
         if pc < 16 {
             let score = pregen::PIECE_VALUE[(pc - 8) as usize][sq as usize];
             match action {
@@ -1048,7 +1047,7 @@ impl Engine {
         };
 
         let mut vl_best = -pregen::MATE_VALUE;
-        let mut mvs = vec![];
+        let mut mvs;
         let mut vls = vec![];
 
         if self.in_check() {
@@ -1194,9 +1193,7 @@ impl Engine {
         let mut vl_best: isize = -pregen::MATE_VALUE;
 
         let mut state = self.new_state(self.result);
-        let mut i = 0;
         loop {
-            i += 1;
             let mv = self.next_state(&mut state);
             if mv <= 0 {
                 break;
@@ -1211,7 +1208,7 @@ impl Engine {
                 false => depth - 1,
             };
 
-            let mut vl = 0;
+            let mut vl;
             if vl_best == -pregen::MATE_VALUE {
                 vl = -self.search_full(-pregen::MATE_VALUE, pregen::MATE_VALUE, new_depth, true);
             } else {
