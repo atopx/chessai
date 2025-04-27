@@ -115,7 +115,11 @@ impl Engine {
             self.set_irrev();
             return;
         }
-        let player = if fen.chars().nth(index).unwrap() == 'b' { 0 } else { 1 };
+        let player = if fen.chars().nth(index).unwrap() == 'b' {
+            0
+        } else {
+            1
+        };
         if self.sd_player == player {
             self.change_side();
         }
@@ -356,7 +360,9 @@ impl Engine {
 
         match pc_src - self_side {
             pregen::PIECE_KING => pregen::in_fort(sq_dst) && pregen::king_span(sq_src, sq_dst),
-            pregen::PIECE_ADVISOR => pregen::in_fort(sq_dst) && pregen::advisor_span(sq_src, sq_dst),
+            pregen::PIECE_ADVISOR => {
+                pregen::in_fort(sq_dst) && pregen::advisor_span(sq_src, sq_dst)
+            }
             pregen::PIECE_BISHOP => {
                 pregen::same_half(sq_src, sq_dst)
                     && pregen::bishop_span(sq_src, sq_dst)
@@ -414,7 +420,11 @@ impl Engine {
         for i in 0..mirror.squares.len() {
             let pc = self.squares[i];
             if pc > 0 {
-                mirror.add_piece(util::mirror_square(i as isize), pc, pregen::PieceAction::ADD)
+                mirror.add_piece(
+                    util::mirror_square(i as isize),
+                    pc,
+                    pregen::PieceAction::ADD,
+                )
             }
         }
 
@@ -539,7 +549,9 @@ impl Engine {
                 let side_knight = pregen::PIECE_KNIGHT + opp_side;
 
                 for n in 0..2usize {
-                    if self.squares[(sq_src + pregen::KNIGHT_CHECK_DELTA[i][n]) as usize] == side_knight {
+                    if self.squares[(sq_src + pregen::KNIGHT_CHECK_DELTA[i][n]) as usize]
+                        == side_knight
+                    {
                         return true;
                     }
                 }
@@ -872,7 +884,9 @@ impl Engine {
                 if mv == state.hash {
                     state.vls.push(0x7fffffff);
                 } else {
-                    state.vls.push(self.history[self.history_index(mv) as usize])
+                    state
+                        .vls
+                        .push(self.history[self.history_index(mv) as usize])
                 };
                 util::shell_sort(&mut state.mvs, &mut state.vls);
                 state.signle = state.mvs.len() == 1
@@ -927,7 +941,9 @@ impl Engine {
             state.mvs = mvs;
             state.vls = vec![];
             for mv in state.mvs.iter() {
-                state.vls.push(self.history[self.history_index(*mv) as usize]);
+                state
+                    .vls
+                    .push(self.history[self.history_index(*mv) as usize]);
             }
             util::shell_sort(&mut state.mvs, &mut state.vls);
             state.index = 0;
@@ -943,7 +959,13 @@ impl Engine {
         0
     }
 
-    pub fn probe_hash(&self, vl_alpha: isize, vl_beta: isize, depth: isize, mvs: &mut [isize]) -> isize {
+    pub fn probe_hash(
+        &self,
+        vl_alpha: isize,
+        vl_beta: isize,
+        depth: isize,
+        mvs: &mut [isize],
+    ) -> isize {
         let hash_idx = (self.zobrist_key & self.mask) as usize;
         let mut hash = self.hash_table[hash_idx]; // todo set hash???
         if hash.zobrist_lock != self.zobrist_key {
@@ -1070,7 +1092,9 @@ impl Engine {
             (mvs, vls) = self.generate_mvs(Some(vls));
             util::shell_sort(&mut mvs, &mut vls);
             for i in 0..mvs.len() {
-                if vls[i] < 10 || (vls[i] < 20 && pregen::home_half(util::dst(mvs[i]), self.sd_player)) {
+                if vls[i] < 10
+                    || (vls[i] < 20 && pregen::home_half(util::dst(mvs[i]), self.sd_player))
+                {
                     mvs = mvs[0..i].to_vec();
                     break;
                 }
@@ -1092,11 +1116,19 @@ impl Engine {
             }
         }
 
-        if vl_best == -pregen::MATE_VALUE { self.mate_value() } else { vl_best }
+        if vl_best == -pregen::MATE_VALUE {
+            self.mate_value()
+        } else {
+            vl_best
+        }
     }
 
     pub fn search_full(
-        &mut self, mut vl_alpha: isize, vl_beta: isize, depth: isize, not_null: bool,
+        &mut self,
+        mut vl_alpha: isize,
+        vl_beta: isize,
+        depth: isize,
+        not_null: bool,
     ) -> isize {
         if depth <= 0 {
             return self.search_pruning(vl_alpha, vl_beta);
@@ -1129,7 +1161,8 @@ impl Engine {
             self.undo_null_move();
             if vl >= vl_beta
                 && (self.null_safe()
-                    || self.search_full(vl_alpha, vl_beta, depth - pregen::NULL_DEPTH, true) >= vl_beta)
+                    || self.search_full(vl_alpha, vl_beta, depth - pregen::NULL_DEPTH, true)
+                        >= vl_beta)
             {
                 return vl;
             }
@@ -1222,8 +1255,9 @@ impl Engine {
                 vl_best = vl;
                 self.result = mv;
                 if vl_best > -pregen::WIN_VALUE && vl_best < pregen::WIN_VALUE {
-                    vl_best +=
-                        (util::randf64(pregen::RANDOMNESS) - util::randf64(pregen::RANDOMNESS)) as isize;
+                    vl_best += (util::randf64(pregen::RANDOMNESS)
+                        - util::randf64(pregen::RANDOMNESS))
+                        as isize;
                     if vl_best == self.draw_value() {
                         vl_best -= 1;
                     }
@@ -1336,9 +1370,10 @@ mod tests {
         let fen = "9/2Cca4/3k1C3/4P1p2/4N1b2/4R1r2/4c1n2/3p1n3/2rNK4/9 w";
         let mut engine = Engine::new();
         let res_correct = vec![
-            13637, 17477, 17221, 18245, 21829, 25925, 30021, 34117, 38213, 42309, 18520, 14424, 22360,
-            22872, 23128, 23384, 26712, 30808, 34904, 39000, 22375, 26215, 26727, 25975, 34167, 26999,
-            35191, 34439, 34183, 33927, 33671, 34951, 35207, 38791, 42935, 47287, 51127,
+            13637, 17477, 17221, 18245, 21829, 25925, 30021, 34117, 38213, 42309, 18520, 14424,
+            22360, 22872, 23128, 23384, 26712, 30808, 34904, 39000, 22375, 26215, 26727, 25975,
+            34167, 26999, 35191, 34439, 34183, 33927, 33671, 34951, 35207, 38791, 42935, 47287,
+            51127,
         ];
         engine.from_fen(fen);
         let (mvs, _) = engine.generate_mvs(None);
@@ -1352,13 +1387,14 @@ mod tests {
         let mut engine = Engine::new();
         engine.from_fen(fen);
         let res_correct = vec![
-            33683, 34197, 34711, 35225, 35739, 38052, 33956, 29860, 25764, 13476, 41892, 42404, 42660,
-            42916, 43172, 43428, 46244, 39594, 35498, 31402, 27306, 15018, 43434, 43178, 42922, 42666,
-            42410, 43946, 47786, 46019, 41923, 41924, 42436, 41925, 42949, 47046, 47047, 47048, 42953,
-            43977, 43466, 43978, 48075, 43979,
+            33683, 34197, 34711, 35225, 35739, 38052, 33956, 29860, 25764, 13476, 41892, 42404,
+            42660, 42916, 43172, 43428, 46244, 39594, 35498, 31402, 27306, 15018, 43434, 43178,
+            42922, 42666, 42410, 43946, 47786, 46019, 41923, 41924, 42436, 41925, 42949, 47046,
+            47047, 47048, 42953, 43977, 43466, 43978, 48075, 43979,
         ];
 
         for _ in 0..100 {
+            // engine.book_move();
             assert!(engine.book_move() != 0);
         }
 
@@ -1379,23 +1415,23 @@ mod tests {
         engine.from_fen("rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1");
         let mv = engine.generate_mvs(None).0[0];
         assert_eq!(mv, 33683);
-        assert_eq!(engine.make_move(mv), true);
+        assert!(engine.make_move(mv));
 
         let mv = engine.generate_mvs(None).0[0];
         assert_eq!(mv, 17203);
-        assert_eq!(engine.make_move(mv), true);
+        assert!(engine.make_move(mv));
 
         let mv = engine.generate_mvs(None).0[0];
         assert_eq!(mv, 29571);
-        assert_eq!(engine.make_move(mv), true);
+        assert!(engine.make_move(mv));
 
         assert_eq!(engine.zobrist_key, -513434690);
         assert_eq!(engine.zobrist_lock, -1428449623);
-        assert_eq!(engine.checked(), false);
+        assert!(!engine.checked());
 
         let mv = engine.generate_mvs(None).0[0];
-        assert_eq!(engine.legal_move(mv), true);
-        assert_eq!(engine.legal_move(mv + 20), false);
+        assert!(engine.legal_move(mv));
+        assert!(!engine.legal_move(mv + 20));
     }
 
     #[test]

@@ -8,5 +8,4 @@ description = "a chiness chess ai"
 license = "MIT"
 
 [dependencies]
-bincode = "1"
 rand = "0.9"

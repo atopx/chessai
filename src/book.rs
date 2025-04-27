@@ -1,12 +1,7 @@
-use std::fs::File;
-use std::io::BufRead;
-use std::io::BufReader;
-use std::io::BufWriter;
-use std::str::FromStr;
 use std::sync::OnceLock;
 
 pub struct Book {
-    pub data: Vec<[isize; 3]>,
+    pub data: [[isize; 3]; 12081],
 }
 
 static BOOK: OnceLock<Book> = OnceLock::new();
@@ -14,8 +9,8 @@ static BOOK: OnceLock<Book> = OnceLock::new();
 impl Book {
     pub fn get() -> &'static Book {
         BOOK.get_or_init(|| {
-            let mut reader = BufReader::new(File::open("book.dat").unwrap());
-            Book { data: bincode::deserialize_from(&mut reader).unwrap() }
+            let data = include!("data/book.dat");
+            Book { data }
         })
     }
 
@@ -35,29 +30,4 @@ impl Book {
         }
         None
     }
-}
-
-/// input file `book.txt` sample:
-/// 203040,34229,6
-/// 509427,33955,1
-/// 1435796,50371,2
-pub fn builder(input_file: &str, output_file: Option<String>) {
-    let input = File::open(input_file).unwrap();
-    let mut book: Vec<[isize; 3]> = Vec::new();
-    let buffered = BufReader::new(input);
-    for line in buffered.lines() {
-        let mut record: Vec<isize> = Vec::new();
-        for i in line.unwrap().split(",").collect::<Vec<&str>>() {
-            record.push(FromStr::from_str(i).unwrap());
-        }
-        if record.len() == 3 {
-            book.push([record[0], record[1], record[2]])
-        }
-    }
-    let mut writer = match output_file {
-        Some(out) => BufWriter::new(File::create(out).unwrap()),
-        None => BufWriter::new(File::create("book.dat").unwrap()),
-    };
-    bincode::serialize_into(&mut writer, &book).unwrap();
-    println!("success, write {} pieces of `book.dat`", book.len());
 }

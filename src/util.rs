@@ -96,7 +96,7 @@ pub fn unsigned_right_shift(x: isize, y: isize) -> isize {
 pub fn randf64(value: isize) -> f64 {
     let mut rng = rand::rng();
     let num: f64 = rng.random_range(0.0..1.0);
-    num.floor() * (value as f64)
+    (num * (value as f64)).floor()
 }
 
 #[cfg(test)]
