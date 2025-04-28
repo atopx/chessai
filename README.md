@@ -37,7 +37,7 @@ src/
 ### 作为库使用
 
 ```rust
-# cargo add chessai
+/// cargo add chessai
 use chessai::Engine;
 
 fn main() {
