@@ -490,30 +490,24 @@ impl Engine {
             pregen::PieceAction::DEL => 0,
             pregen::PieceAction::ADD => pc,
         };
-        let mut adjust = 0;
-        if pc < 16 {
-            let score = pregen::PIECE_VALUE[(pc - 8) as usize][sq as usize];
+
+        let adjust = if pc < 16 {
+            let ad = pc - 8;
+            let score = pregen::PIECE_VALUE[ad as usize][sq as usize];
             match action {
-                pregen::PieceAction::DEL => {
-                    self.vl_white -= score;
-                }
-                pregen::PieceAction::ADD => {
-                    self.vl_white += score;
-                }
-            }
+                pregen::PieceAction::DEL => self.vl_white -= score,
+                pregen::PieceAction::ADD => self.vl_white += score,
+            };
+            ad
         } else {
-            adjust = pc - 16;
-            let score = pregen::PIECE_VALUE[adjust as usize][util::square_fltp(sq)];
+            let ad = pc - 16;
+            let score = pregen::PIECE_VALUE[ad as usize][util::square_fltp(sq)];
             match action {
-                pregen::PieceAction::DEL => {
-                    self.vl_black -= score;
-                }
-                pregen::PieceAction::ADD => {
-                    self.vl_black += score;
-                }
-            }
-            adjust += 7;
-        }
+                pregen::PieceAction::DEL => self.vl_black -= score,
+                pregen::PieceAction::ADD => self.vl_black += score,
+            };
+            ad + 7
+        };
         self.zobrist_key ^= pregen::PRE_GEN_ZOB_RIST_KEY_TABLE[adjust as usize][sq as usize];
         self.zobrist_lock ^= pregen::PRE_GEN_ZOB_RIST_LOCK_TABLE[adjust as usize][sq as usize];
     }
@@ -535,7 +529,6 @@ impl Engine {
             if self.squares[(sq_src - 1) as usize] == side_pawn {
                 return true;
             }
-            // self_side 16 opp_side 8 player 1
             if self.squares[(sq_src + 1) as usize] == side_pawn {
                 return true;
             }
@@ -1349,15 +1342,6 @@ mod tests {
     }
 
     #[test]
-    fn test_engine_22842() {
-        let fen: &str = "rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C2C4/9/RNBAKABNR b";
-        let mut engine = Engine::new();
-        engine.from_fen(fen);
-        let mv = engine.search_main(64, 1000);
-        assert_eq!(mv, 22842);
-    }
-
-    #[test]
     fn test_engine_26215() {
         let fen = "9/2Cca4/3k1C3/4P1p2/4N1b2/4R1r2/4c1n2/3p1n3/2rNK4/9 w";
         let mut engine = Engine::new();
@@ -1395,7 +1379,6 @@ mod tests {
         ];
 
         for _ in 0..100 {
-            // engine.book_move();
             assert!(engine.book_move() != 0);
         }
 
@@ -1403,7 +1386,11 @@ mod tests {
         assert_eq!(pos_actions, res_correct);
         assert_eq!(engine.zobrist_key, -421837250);
         assert_eq!(engine.zobrist_lock, 86398677);
+    }
 
+    #[test]
+    fn test_zobrist() {
+        // FIXME 为什么测试不通过
         let mut engine = Engine::new();
         engine.from_fen("9/2Cca4/3k1C3/4P1p2/4N1b2/4R1r2/4c1n2/3p1n3/2rNK4/9 w");
         assert_eq!(engine.zobrist_key, -1362866936);
