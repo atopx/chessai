@@ -1,4 +1,7 @@
-use chessai::{data, shell, util, Engine};
+use chessai::Engine;
+use chessai::data;
+use chessai::shell;
+use chessai::util;
 
 #[test]
 fn test_fen() {
@@ -27,7 +30,7 @@ fn test_generate_moves() {
         34183, 33927, 33671, 34951, 35207, 38791, 42935, 47287, 51127,
     ];
     engine.from_fen(fen);
-    let (mvs, _) = engine.generate_mvs(None);
+    let (mvs, _) = engine.board.generate_mvs(None);
     assert_eq!(mvs.len(), 37);
     assert_eq!(mvs, res_correct);
 }
@@ -45,46 +48,46 @@ fn test_search_book() {
     ];
 
     for _ in 0..100 {
-        assert!(engine.book_move() != 0);
+        assert!(engine.board.book_move() != 0);
     }
 
-    let (pos_actions, _) = engine.generate_mvs(None);
+    let (pos_actions, _) = engine.board.generate_mvs(None);
     assert_eq!(pos_actions, res_correct);
-    assert_eq!(engine.zobrist_key, -421837250);
-    assert_eq!(engine.zobrist_lock, 86398677);
+    assert_eq!(engine.board.zobrist_key, -421837250);
+    assert_eq!(engine.board.zobrist_lock, 86398677);
 }
 
 #[test]
 fn test_zobrist() {
     let mut engine = Engine::new();
     engine.from_fen("9/2Cca4/3k1C3/4P1p2/4N1b2/4R1r2/4c1n2/3p1n3/2rNK4/9 w");
-    assert_eq!(engine.zobrist_key, -1362866936);
-    assert_eq!(engine.zobrist_lock, -554356577);
+    assert_eq!(engine.board.zobrist_key, -1362866936);
+    assert_eq!(engine.board.zobrist_lock, -554356577);
 }
 
 #[test]
 fn test_few_step() {
     let mut engine = Engine::new();
     engine.from_fen("rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1");
-    let mv = engine.generate_mvs(None).0[0];
+    let mv = engine.board.generate_mvs(None).0[0];
     assert_eq!(mv, 33683);
-    assert!(engine.make_move(mv));
+    assert!(engine.board.make_move(mv));
 
-    let mv = engine.generate_mvs(None).0[0];
+    let mv = engine.board.generate_mvs(None).0[0];
     assert_eq!(mv, 17203);
-    assert!(engine.make_move(mv));
+    assert!(engine.board.make_move(mv));
 
-    let mv = engine.generate_mvs(None).0[0];
+    let mv = engine.board.generate_mvs(None).0[0];
     assert_eq!(mv, 29571);
-    assert!(engine.make_move(mv));
+    assert!(engine.board.make_move(mv));
 
-    assert_eq!(engine.zobrist_key, -513434690);
-    assert_eq!(engine.zobrist_lock, -1428449623);
-    assert!(!engine.checked());
+    assert_eq!(engine.board.zobrist_key, -513434690);
+    assert_eq!(engine.board.zobrist_lock, -1428449623);
+    assert!(!engine.board.checked());
 
-    let mv = engine.generate_mvs(None).0[0];
-    assert!(engine.legal_move(mv));
-    assert!(!engine.legal_move(mv + 20));
+    let mv = engine.board.generate_mvs(None).0[0];
+    assert!(engine.board.legal_move(mv));
+    assert!(!engine.board.legal_move(mv + 20));
 }
 
 #[test]
@@ -212,7 +215,6 @@ fn test_iccs_moves() {
         assert_eq!(util::move2iccs(util::iccs2move(mv)), mv)
     }
 }
-
 
 #[test]
 fn test_puzzle_list() {
@@ -475,7 +477,7 @@ fn test_puzzle_list() {
                         looped += 1;
                         let mv = util::merge(sq_src, sq_dst);
                         merged += mv;
-                        if engine.legal_move(mv) {
+                        if engine.board.legal_move(mv) {
                             legal += 1;
                         }
                     }
@@ -483,14 +485,14 @@ fn test_puzzle_list() {
             }
         }
 
-        let (mvs, _) = engine.generate_mvs(None);
+        let (mvs, _) = engine.board.generate_mvs(None);
         for mv in &mvs {
-            if engine.make_move(*mv) {
+            if engine.board.make_move(*mv) {
                 moved += 1;
-                if engine.checked() {
+                if engine.board.checked() {
                     checked += 1;
                 }
-                engine.undo_make_move();
+                engine.board.undo_make_move();
             }
         }
         gened += mvs.len();

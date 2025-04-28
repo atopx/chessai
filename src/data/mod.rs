@@ -24,12 +24,19 @@ pub mod piece {
         }
     }
 
+    #[rustfmt::skip]
+    pub const FEN: [char; 24] = [
+        ' ', ' ', ' ', ' ', ' ', ' ', 
+        ' ', ' ', 'K', 'A', 'B', 'N', 
+        'R', 'C', 'P', ' ', 'k', 'a', 
+        'b', 'n', 'r', 'c', 'p', ' ',
+    ];
+
     pub enum Action {
         ADD,
         DEL,
     }
 }
-
 
 pub const LIMIT_DEPTH: usize = 64;
 pub const NULL_DEPTH: isize = 2;
@@ -54,65 +61,34 @@ pub const RANK_BOTTOM: isize = 12;
 pub const FILE_LEFT: isize = 3;
 pub const FILE_RIGHT: isize = 11;
 
-pub const FEN_PIECE: [char; 24] = [
-    ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', 'K', 'A', 'B', 'N', 
-    'R', 'C', 'P', ' ', 'k', 'a', 'b', 'n', 'r', 'c', 'p', ' ',
-];
-
 pub const BROAD: [i8; 256] = include!("BROAD.dat");
 pub const FORT: [i8; 256] = include!("FORT.dat");
 
-pub const fn in_broad(idx: isize) -> bool {
-    BROAD[idx as usize] != 0
-}
+pub const fn in_broad(idx: isize) -> bool { BROAD[idx as usize] != 0 }
 
-pub const fn in_fort(idx: isize) -> bool {
-    FORT[idx as usize] != 0
-}
+pub const fn in_fort(idx: isize) -> bool { FORT[idx as usize] != 0 }
 
-pub const fn king_span(src: isize, dst: isize) -> bool {
-    LEGAL_SPAN[(dst - src + 256) as usize] == 1
-}
+pub const fn king_span(src: isize, dst: isize) -> bool { LEGAL_SPAN[(dst - src + 256) as usize] == 1 }
 
-pub const fn advisor_span(src: isize, dst: isize) -> bool {
-    LEGAL_SPAN[(dst - src + 256) as usize] == 2
-}
+pub const fn advisor_span(src: isize, dst: isize) -> bool { LEGAL_SPAN[(dst - src + 256) as usize] == 2 }
 
-pub const fn bishop_span(src: isize, dst: isize) -> bool {
-    LEGAL_SPAN[(dst - src + 256) as usize] == 3
-}
+pub const fn bishop_span(src: isize, dst: isize) -> bool { LEGAL_SPAN[(dst - src + 256) as usize] == 3 }
 
-pub const fn bishop_pin(src: isize, dst: isize) -> usize {
-    ((src + dst) >> 1) as usize
-}
+pub const fn bishop_pin(src: isize, dst: isize) -> usize { ((src + dst) >> 1) as usize }
 
-pub const fn knight_pin(src: isize, dst: isize) -> isize {
-    src + KNIGHT_PIN[(dst - src + 256) as usize]
-}
+pub const fn knight_pin(src: isize, dst: isize) -> isize { src + KNIGHT_PIN[(dst - src + 256) as usize] }
 
-pub const fn home_half(sq: isize, sd: isize) -> bool {
-    (sq & 0x80) != (sd << 7)
-}
+pub const fn home_half(sq: isize, sd: isize) -> bool { (sq & 0x80) != (sd << 7) }
 
-pub const fn away_half(sq: isize, sd: isize) -> bool {
-    (sq & 0x80) == (sd << 7)
-}
+pub const fn away_half(sq: isize, sd: isize) -> bool { (sq & 0x80) == (sd << 7) }
 
-pub const fn same_half(src: isize, dst: isize) -> bool {
-    ((src ^ dst) & 0x80) == 0
-}
+pub const fn same_half(src: isize, dst: isize) -> bool { ((src ^ dst) & 0x80) == 0 }
 
-pub const fn same_rank(src: isize, dst: isize) -> bool {
-    ((src ^ dst) & 0xf0) == 0
-}
+pub const fn same_rank(src: isize, dst: isize) -> bool { ((src ^ dst) & 0xf0) == 0 }
 
-pub const fn same_file(src: isize, dst: isize) -> bool {
-    ((src ^ dst) & 0x0f) == 0
-}
+pub const fn same_file(src: isize, dst: isize) -> bool { ((src ^ dst) & 0x0f) == 0 }
 
-pub const fn mvv_lva(pc: isize, lva: isize) -> isize {
-    MVV_VALUE[(pc & 7) as usize] - lva
-}
+pub const fn mvv_lva(pc: isize, lva: isize) -> isize { MVV_VALUE[(pc & 7) as usize] - lva }
 
 pub const KING_DELTA: [isize; 4] = [-16, -1, 1, 16];
 pub const ADVISOR_DELTA: [isize; 4] = [-17, -15, 15, 17];
