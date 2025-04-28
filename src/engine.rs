@@ -2,6 +2,7 @@ use std::time::Duration;
 use std::time::Instant;
 
 use crate::data::book::Book;
+use crate::shell;
 use crate::state::MoveState;
 use crate::state::Status;
 use crate::data;
@@ -884,7 +885,7 @@ impl Engine {
                         .vls
                         .push(self.history[self.history_index(mv) as usize])
                 };
-                util::shell_sort(&mut state.mvs, &mut state.vls);
+                shell::sort(&mut state.mvs, &mut state.vls);
                 state.signle = state.mvs.len() == 1
             }
             state.hash = hash;
@@ -941,7 +942,7 @@ impl Engine {
                     .vls
                     .push(self.history[self.history_index(*mv) as usize]);
             }
-            util::shell_sort(&mut state.mvs, &mut state.vls);
+            shell::sort(&mut state.mvs, &mut state.vls);
             state.index = 0;
         };
 
@@ -1073,7 +1074,7 @@ impl Engine {
             for mv in mvs.iter_mut() {
                 vls.push(self.history[self.history_index(*mv) as usize]);
             }
-            util::shell_sort(&mut mvs, &mut vls);
+            shell::sort(&mut mvs, &mut vls);
         } else {
             vl = self.evaluate();
 
@@ -1086,7 +1087,7 @@ impl Engine {
             };
 
             (mvs, vls) = self.generate_mvs(Some(vls));
-            util::shell_sort(&mut mvs, &mut vls);
+            shell::sort(&mut mvs, &mut vls);
             for i in 0..mvs.len() {
                 if vls[i] < 10
                     || (vls[i] < 20 && data::home_half(util::dst(mvs[i]), self.sd_player))

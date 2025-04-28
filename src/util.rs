@@ -52,42 +52,6 @@ pub fn mirror_move(mv: isize) -> isize {
     merge(mirror_square(src(mv)), mirror_square(dst(mv)))
 }
 
-const SHELL_STEPS: [usize; 8] = [0, 1, 4, 13, 40, 121, 364, 1093];
-
-pub fn shell_sort(mvs: &mut [isize], vls: &mut [isize]) {
-    if mvs.is_empty() {
-        return;
-    }
-
-    let mut step_level = 1;
-    while step_level < SHELL_STEPS.len() && SHELL_STEPS[step_level] < mvs.len() {
-        step_level += 1;
-    }
-    step_level -= 1;
-
-    while step_level > 0 {
-        let step = SHELL_STEPS[step_level];
-        for i in 0..mvs.len() {
-            let mv_best = mvs[i];
-            let vl_best = vls[i];
-            let mut j = i as isize - step as isize;
-            while j >= 0 {
-                let j_usize = j as usize;
-                if vl_best <= vls[j_usize] {
-                    break;
-                }
-                mvs[j_usize + step] = mvs[j_usize];
-                vls[j_usize + step] = vls[j_usize];
-                j -= step as isize;
-            }
-            let insert_pos = (j + step as isize) as usize;
-            mvs[insert_pos] = mv_best;
-            vls[insert_pos] = vl_best;
-        }
-        step_level -= 1;
-    }
-}
-
 pub fn unsigned_right_shift(x: isize, y: isize) -> isize {
     let x = (x as usize) & 0xffffffff;
     (x >> (y & 0xf)) as isize
@@ -97,6 +61,58 @@ pub fn randf64(value: isize) -> f64 {
     let mut rng = rand::rng();
     let num: f64 = rng.random_range(0.0..1.0);
     (num * (value as f64)).floor()
+}
+
+pub fn cord2uint8(cord: &str) -> isize {
+    let alphabet = cord.chars().next().unwrap() as isize - 'a' as isize + 3;
+    let numeric = '9' as isize - cord.chars().nth(1).unwrap() as isize + 3;
+    (numeric << 4) | alphabet
+}
+
+pub fn pos2iccs(src_row: usize, src_col: usize, dst_row: usize, dst_col: usize) -> String {
+    let mut iccs = String::new();
+    iccs.push(char::from(src_col as u8 + b'a'));
+    iccs.push(char::from(src_row as u8 + b'0'));
+    iccs.push(char::from(dst_col as u8 + b'a'));
+    iccs.push(char::from(dst_row as u8 + b'0'));
+    iccs
+}
+
+pub fn iccs2pos(iccs: &str) -> ((usize, usize), (usize, usize)) {
+    let chars = iccs.as_bytes();
+    let src_row = (chars[1] - b'a') as usize;
+    let src_col = (chars[0] - b'0') as usize;
+    let dst_row = (chars[3] - b'a') as usize;
+    let dst_col = (chars[2] - b'0') as usize;
+    ((src_row, src_col), (dst_row, dst_col))
+}
+
+pub fn move2pos(mv: isize) -> ((usize, usize), (usize, usize)) {
+    let src = super::util::src(mv);
+    let dst = super::util::dst(mv);
+    let src_col = file_x(src) as usize - 3;
+    let src_row = 12 - rank_y(src) as usize;
+    let dst_col = file_x(dst) as usize - 3;
+    let dst_row = 12 - rank_y(dst) as usize;
+    ((src_row, src_col), (dst_row, dst_col))
+}
+
+pub fn iccs2move(iccs: &str) -> isize {
+    let iccs = iccs.to_ascii_lowercase();
+    let src = cord2uint8(&iccs[..2]);
+    let dst = cord2uint8(&iccs[2..]);
+    (dst << 8) | src
+}
+
+pub fn move2iccs(mv: isize) -> String {
+    let src = super::util::src(mv);
+    let dst = super::util::dst(mv);
+    let mut iccs = String::new();
+    iccs.push((b'a' + file_x(src) as u8 - 3) as char);
+    iccs.push((b'9' - rank_y(src) as u8 + 3) as char);
+    iccs.push((b'a' + file_x(dst) as u8 - 3) as char);
+    iccs.push((b'9' - rank_y(dst) as u8 + 3) as char);
+    iccs
 }
 
 #[cfg(test)]
@@ -110,46 +126,42 @@ mod tests {
     }
 
     #[test]
-    fn test_shell_sort() {
-        let mut mvs = vec![22599, 34697, 30615, 34713, 46758, 34728, 46760, 13749, 46773];
-        let mut vls = vec![29, 36, 26, 39, 28, 39, 29, 26, 26];
-        shell_sort(&mut mvs, &mut vls);
-        let exp_mvs = [34728, 34713, 34697, 22599, 46760, 46758, 30615, 13749, 46773];
-        let exp_vls = [39, 39, 36, 29, 29, 28, 26, 26, 26];
-        for i in 0..9 {
-            assert_eq!(exp_mvs[i], mvs[i]);
-            assert_eq!(exp_vls[i], vls[i]);
-        }
+    fn test_move2pos() {
+        let ((src_row, src_col), (dst_row, dst_col)) = move2pos(34726);
+        assert_eq!(src_row, 2);
+        assert_eq!(src_col, 3);
+        assert_eq!(dst_row, 4);
+        assert_eq!(dst_col, 4);
     }
 
     #[test]
-    fn test_shell_sort_random() {
-        // 生成随机测试数据
-        let mut rng = rand::rng();
-        let mut mvs: Vec<isize> = (0..1000).map(|_| rng.random_range(0..1000) as isize).collect();
-        let mut vls = mvs.clone();
+    fn test_pos2iccs() {
+        let src_row = 2;
+        let src_col = 3;
+        let dst_row = 4;
+        let dst_col = 4;
+        assert_eq!(pos2iccs(src_row, src_col, dst_row, dst_col), "d2e4")
+    }
 
-        // 执行排序
-        shell_sort(&mut mvs, &mut vls);
+    #[test]
+    fn test_move2iccs() {
+        let t = move2iccs(22375);
+        assert_eq!(t, "e6e7");
+    }
 
-        // 验证结果
-        for i in 0..vls.len().saturating_sub(1) {
-            // 检查降序排列
-            assert!(
-                vls[i] >= vls[i + 1],
-                "Values not in descending order at positions {} and {}: {} vs {}",
-                i,
-                i + 1,
-                vls[i],
-                vls[i + 1]
-            );
+    #[test]
+    fn test_iccs2move() {
+        let t = iccs2move("d2e4");
+        assert_eq!(t, 34726)
+    }
 
-            // 检查元素对应关系
-            assert_eq!(
-                mvs[i], vls[i],
-                "Mismatch between mvs and vls at position {}: {} vs {}",
-                i, mvs[i], vls[i]
-            );
+    #[test]
+    fn test_iccs_moves() {
+        let mvs = vec![
+            "g3g4", "g6g5", "b0c2", "h7h0", "e3e4", "d9e8", "e1e2", "c6c5",
+        ];
+        for mv in mvs {
+            assert_eq!(move2iccs(iccs2move(mv)), mv)
         }
     }
 }
