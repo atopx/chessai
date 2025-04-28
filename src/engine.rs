@@ -28,7 +28,7 @@ pub struct Engine {
     pub board: Borad,
     pub mask: isize,
     pub hash_table: Vec<Hash>,
-    pub search_history: Vec<isize>,
+    pub history: Vec<isize>,
     pub killer_table: Vec<[isize; 2]>,
     pub result: isize,
     pub all_nodes: isize,
@@ -44,7 +44,7 @@ impl Engine {
             board: Borad::new(),
             mask: 65535,
             hash_table: vec![],
-            search_history: vec![],
+            history: vec![],
             killer_table: vec![],
             result: 0,
             all_nodes: 0,
@@ -105,7 +105,7 @@ impl Engine {
     }
 
     pub fn new_state(&mut self, hash: isize) -> MoveState {
-        let mut state = MoveState::new(self.search_history.clone(), hash);
+        let mut state = MoveState::new(hash);
         if self.board.in_check() {
             state.phase = Status::REST;
             let (all_mvs, _) = self.board.generate_mvs(None);
@@ -118,7 +118,7 @@ impl Engine {
                 if mv == state.hash {
                     state.vls.push(0x7fffffff);
                 } else {
-                    state.vls.push(self.search_history[self.board.history_index(mv) as usize])
+                    state.vls.push(self.history[self.board.history_index(mv) as usize])
                 };
                 shell::sort(&mut state.mvs, &mut state.vls);
                 state.signle = state.mvs.len() == 1
@@ -173,7 +173,7 @@ impl Engine {
             state.mvs = mvs;
             state.vls = vec![];
             for mv in state.mvs.iter() {
-                state.vls.push(self.search_history[self.board.history_index(*mv) as usize]);
+                state.vls.push(self.history[self.board.history_index(*mv) as usize]);
             }
             shell::sort(&mut state.mvs, &mut state.vls);
             state.index = 0;
@@ -268,7 +268,7 @@ impl Engine {
 
     pub fn set_best_move(&mut self, mv: isize, depth: isize) {
         let idx = self.board.history_index(mv) as usize;
-        self.search_history[idx] += depth * depth;
+        self.history[idx] += depth * depth;
         let killer = self.killer_table[self.board.distance as usize];
         if killer[0] != mv {
             self.killer_table[self.board.distance as usize] = [mv, killer[0]];
@@ -299,7 +299,7 @@ impl Engine {
         if self.board.in_check() {
             (mvs, _) = self.board.generate_mvs(None);
             for mv in mvs.iter_mut() {
-                vls.push(self.search_history[self.board.history_index(*mv) as usize]);
+                vls.push(self.history[self.board.history_index(*mv) as usize]);
             }
             shell::sort(&mut mvs, &mut vls);
         } else {
@@ -343,7 +343,9 @@ impl Engine {
         if vl_best == -data::MATE_VALUE { self.board.mate_value() } else { vl_best }
     }
 
-    pub fn search_full(&mut self, mut vl_alpha: isize, vl_beta: isize, depth: isize, not_null: bool) -> isize {
+    pub fn search_full(
+        &mut self, mut vl_alpha: isize, vl_beta: isize, depth: isize, not_null: bool,
+    ) -> isize {
         if depth <= 0 {
             return self.search_pruning(vl_alpha, vl_beta);
         };
@@ -524,7 +526,7 @@ impl Engine {
 
         self.hash_table = vec![Hash::default(); self.mask as usize + 1];
         self.killer_table = vec![[0, 0]; data::LIMIT_DEPTH];
-        self.search_history = vec![0; 4096];
+        self.history = vec![0; data::LIMIT_HISTORY];
         self.result = 0;
         self.all_nodes = 0;
         self.board.distance = 0;

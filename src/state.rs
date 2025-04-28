@@ -10,7 +10,6 @@ pub enum Status {
 pub struct MoveState {
     pub mvs: Vec<isize>,
     pub vls: Vec<isize>,
-    pub history: Vec<isize>,
     pub index: usize,
     pub hash: isize,
     pub killer_first: isize,
@@ -20,11 +19,10 @@ pub struct MoveState {
 }
 
 impl MoveState {
-    pub fn new(hisoty: Vec<isize>, hash: isize) -> Self {
+    pub fn new(hash: isize) -> Self {
         Self {
             mvs: vec![],
             vls: vec![],
-            history: hisoty,
             index: 0,
             hash,
             killer_first: 0,

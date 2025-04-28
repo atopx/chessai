@@ -1,6 +1,6 @@
+use crate::data;
 use crate::data::book::Book;
 use crate::data::piece;
-use crate::data::{self};
 use crate::history::Moved;
 use crate::util;
 
@@ -59,13 +59,13 @@ impl Borad {
             } else if c.is_ascii_uppercase() {
                 if x <= data::FILE_RIGHT {
                     if let Some(pt) = piece::from_char(c) {
-                        self.add_piece(coord_xy(x, y), pt + 8, piece::Action::ADD);
+                        self.add_piece(util::coord_xy(x, y), pt + 8, piece::Action::ADD);
                     };
                     x += 1;
                 }
             } else if c.is_ascii_lowercase() && x <= data::FILE_RIGHT {
                 if let Some(pt) = piece::from_char((c as u8 + b'A' - b'a') as char) {
-                    self.add_piece(coord_xy(x, y), pt + 16, piece::Action::ADD);
+                    self.add_piece(util::coord_xy(x, y), pt + 16, piece::Action::ADD);
                 }
                 x += 1;
             }
@@ -94,7 +94,7 @@ impl Borad {
             let mut k = 0;
             let mut row = String::new();
             for x in data::FILE_LEFT..data::FILE_RIGHT + 1 {
-                let pc = self.squares[coord_xy(x, y) as usize];
+                let pc = self.squares[util::coord_xy(x, y) as usize];
                 if pc > 0 {
                     if k > 0 {
                         row.push((k as u8 + b'0') as char);
@@ -155,7 +155,7 @@ impl Borad {
             ad
         } else {
             let ad = pc - 16;
-            let score = piece::VALUES[ad as usize][util::square_fltp(sq)];
+            let score = piece::VALUES[ad as usize][(254 - sq) as usize];
             match action {
                 piece::Action::DEL => self.vl_black -= score,
                 piece::Action::ADD => self.vl_black += score,
@@ -620,8 +620,6 @@ impl Borad {
                     for i in 0..4usize {
                         let delta = data::KING_DELTA[i];
                         let mut sq_dst = sq_src as isize + delta;
-                        // i=1 delta= -1 sq_dst= 52 sq_src= 53
-
                         while data::in_broad(sq_dst) {
                             let pc_dst = self.squares[sq_dst as usize];
                             if pc_dst == 0 {
@@ -746,5 +744,3 @@ impl Borad {
         status
     }
 }
-
-fn coord_xy(x: isize, y: isize) -> isize { x + (y << 4) }

@@ -38,6 +38,7 @@ pub mod piece {
     }
 }
 
+pub const LIMIT_HISTORY: usize = 4096;
 pub const LIMIT_DEPTH: usize = 64;
 pub const NULL_DEPTH: isize = 2;
 pub const RANDOMNESS: isize = 8;
