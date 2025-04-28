@@ -9,7 +9,7 @@ static BOOK: OnceLock<Book> = OnceLock::new();
 impl Book {
     pub fn get() -> &'static Book {
         BOOK.get_or_init(|| {
-            let data = include!("data/book.dat");
+            let data = include!("book.dat");
             Book { data }
         })
     }

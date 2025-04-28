@@ -1,3 +1,36 @@
+pub mod book;
+
+pub mod piece {
+    pub const KING: isize = 0;
+    pub const ADVISOR: isize = 1;
+    pub const BISHOP: isize = 2;
+    pub const KNIGHT: isize = 3;
+    pub const ROOK: isize = 4;
+    pub const CANNON: isize = 5;
+    pub const PAWN: isize = 6;
+
+    pub const VALUES: [[isize; 256]; 7] = include!("PIECE_VALUE.dat");
+
+    pub fn from_char(c: char) -> Option<isize> {
+        match c {
+            'K' => Some(KING),
+            'A' => Some(ADVISOR),
+            'B' | 'E' => Some(BISHOP),
+            'H' | 'N' => Some(KNIGHT),
+            'R' => Some(ROOK),
+            'C' => Some(CANNON),
+            'P' => Some(PAWN),
+            _ => None,
+        }
+    }
+
+    pub enum Action {
+        ADD,
+        DEL,
+    }
+}
+
+
 pub const LIMIT_DEPTH: usize = 64;
 pub const NULL_DEPTH: isize = 2;
 pub const RANDOMNESS: isize = 8;
@@ -21,48 +54,13 @@ pub const RANK_BOTTOM: isize = 12;
 pub const FILE_LEFT: isize = 3;
 pub const FILE_RIGHT: isize = 11;
 
-pub const PIECE_KING: isize = 0;
-pub const PIECE_ADVISOR: isize = 1;
-pub const PIECE_BISHOP: isize = 2;
-pub const PIECE_KNIGHT: isize = 3;
-pub const PIECE_ROOK: isize = 4;
-pub const PIECE_CANNON: isize = 5;
-pub const PIECE_PAWN: isize = 6;
-
-pub const WINNER_WHITE: isize = 0;
-pub const WINNER_BLACK: isize = 1;
-pub const WINNER_TIE: isize = 2;
-pub const WINNER_3: isize = 3;
-
-pub enum Winner {
-    White, // 红方胜
-    Black, // 黑方胜
-    Tie,   // 和
-}
-
-pub fn from_char(c: char) -> Option<isize> {
-    match c {
-        'K' => Some(PIECE_KING),
-        'A' => Some(PIECE_ADVISOR),
-        'B' => Some(PIECE_BISHOP),
-        'E' => Some(PIECE_BISHOP),
-        'H' => Some(PIECE_KNIGHT),
-        'N' => Some(PIECE_KNIGHT),
-        'R' => Some(PIECE_ROOK),
-        'C' => Some(PIECE_CANNON),
-        'P' => Some(PIECE_PAWN),
-        _ => None,
-    }
-}
-
 pub const FEN_PIECE: [char; 24] = [
     ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', 'K', 'A', 'B', 'N', 
     'R', 'C', 'P', ' ', 'k', 'a', 'b', 'n', 'r', 'c', 'p', ' ',
 ];
 
-pub const BROAD: [i8; 256] = include!("data/BROAD.dat");
-
-pub const FORT: [i8; 256] = include!("data/FORT.dat");
+pub const BROAD: [i8; 256] = include!("BROAD.dat");
+pub const FORT: [i8; 256] = include!("FORT.dat");
 
 pub const fn in_broad(idx: isize) -> bool {
     BROAD[idx as usize] != 0
@@ -116,27 +114,19 @@ pub const fn mvv_lva(pc: isize, lva: isize) -> isize {
     MVV_VALUE[(pc & 7) as usize] - lva
 }
 
-#[derive(Debug)]
-pub enum PieceAction {
-    ADD,
-    DEL,
-}
-
 pub const KING_DELTA: [isize; 4] = [-16, -1, 1, 16];
 pub const ADVISOR_DELTA: [isize; 4] = [-17, -15, 15, 17];
 pub const KNIGHT_DELTA: [[isize; 2]; 4] = [[-33, -31], [-18, 14], [-14, 18], [31, 33]];
 pub const KNIGHT_CHECK_DELTA: [[isize; 2]; 4] = [[-33, -18], [-31, -14], [14, 31], [18, 33]];
 pub const MVV_VALUE: [isize; 8] = [50, 10, 10, 30, 40, 30, 20, 0];
 
-pub const LEGAL_SPAN: [isize; 512] = include!("data/LEGAL_SPAN.dat");
+pub const LEGAL_SPAN: [isize; 512] = include!("LEGAL_SPAN.dat");
 
-pub const KNIGHT_PIN: [isize; 512] = include!("data/KNIGHT_PIN.dat");
-
-pub const PIECE_VALUE: [[isize; 256]; 7] = include!("data/PIECE_VALUE.dat");
+pub const KNIGHT_PIN: [isize; 512] = include!("KNIGHT_PIN.dat");
 
 pub const PRE_GEN_ZOB_RIST_KEY_PLAYER: isize = 1099503838;
 pub const PRE_GEN_ZOB_RIST_LOCK_PLAYER: isize = 1730021002;
 
-pub static PRE_GEN_ZOB_RIST_KEY_TABLE: [[isize; 256]; 14] = include!("data/KEY_TABLE.dat");
+pub static PRE_GEN_ZOB_RIST_KEY_TABLE: [[isize; 256]; 14] = include!("KEY_TABLE.dat");
 
-pub static PRE_GEN_ZOB_RIST_LOCK_TABLE: [[isize; 256]; 14] = include!("data/LOCK_TABLE.dat");
+pub static PRE_GEN_ZOB_RIST_LOCK_TABLE: [[isize; 256]; 14] = include!("LOCK_TABLE.dat");
