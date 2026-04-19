@@ -16,22 +16,13 @@ pub enum PieceType {
 }
 
 impl PieceType {
-    pub const COUNT: usize = 7;
-    pub const ALL: [PieceType; 7] = [
-        PieceType::King,
-        PieceType::Advisor,
-        PieceType::Bishop,
-        PieceType::Knight,
-        PieceType::Rook,
-        PieceType::Cannon,
-        PieceType::Pawn,
-    ];
+    pub(crate) const COUNT: usize = 7;
 
     #[inline]
-    pub const fn index(self) -> usize { self as usize }
+    pub(crate) const fn index(self) -> usize { self as usize }
 
     #[inline]
-    pub const fn from_index(i: usize) -> Option<PieceType> {
+    pub(crate) const fn from_index(i: usize) -> Option<PieceType> {
         Some(match i {
             0 => PieceType::King,
             1 => PieceType::Advisor,
@@ -60,7 +51,7 @@ impl PieceType {
 
     /// Accepts the FEN letter regardless of case and the alternative letters used by some
     /// dialects (`E` for bishop, `H` for knight).
-    pub const fn from_fen_char(c: char) -> Option<PieceType> {
+    pub(crate) const fn from_fen_char(c: char) -> Option<PieceType> {
         let up = c.to_ascii_uppercase();
         Some(match up {
             'K' => PieceType::King,
@@ -83,17 +74,14 @@ impl PieceType {
 pub struct Piece(u8);
 
 impl Piece {
-    pub const COUNT: usize = 14;
+    pub(crate) const COUNT: usize = 14;
 
     #[inline]
     pub const fn new(color: Color, kind: PieceType) -> Piece { Piece(((color as u8) << 3) | kind as u8) }
 
-    #[inline]
-    pub const fn raw(self) -> u8 { self.0 }
-
     /// Dense index in `0..14` suitable for per-piece tables.
     #[inline]
-    pub const fn index(self) -> usize {
+    pub(crate) const fn index(self) -> usize {
         let color = (self.0 >> 3) as usize;
         let kind = (self.0 & 7) as usize;
         color * 7 + kind
@@ -109,7 +97,6 @@ impl Piece {
 
     #[inline]
     pub const fn kind(self) -> PieceType {
-        // SAFETY of `unwrap`: the lower 3 bits of every constructed Piece are in 0..=6.
         match PieceType::from_index((self.0 & 7) as usize) {
             Some(k) => k,
             None => PieceType::Pawn,
@@ -117,7 +104,7 @@ impl Piece {
     }
 
     #[inline]
-    pub const fn from_index(i: usize) -> Piece {
+    pub(crate) const fn from_index(i: usize) -> Piece {
         let color = Color::from_index(i / 7);
         let kind = match PieceType::from_index(i % 7) {
             Some(k) => k,
@@ -134,7 +121,7 @@ impl Piece {
         }
     }
 
-    pub const fn from_fen_char(c: char) -> Option<Piece> {
+    pub(crate) const fn from_fen_char(c: char) -> Option<Piece> {
         let color = if c.is_ascii_uppercase() { Color::Red } else { Color::Black };
         match PieceType::from_fen_char(c) {
             Some(k) => Some(Piece::new(color, k)),

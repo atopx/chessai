@@ -5,7 +5,6 @@ use std::time::Duration;
 use std::time::Instant;
 
 use crate::eval::BAN_VALUE;
-use crate::eval::DRAW_VALUE;
 use crate::eval::MATE_VALUE;
 use crate::eval::NULL_OKAY_MARGIN;
 use crate::eval::WIN_VALUE;
@@ -27,16 +26,16 @@ use crate::tt::TranspositionTable;
 use crate::tt::mate_score_from_tt;
 
 /// Search thread identifier used to slightly diversify Lazy SMP workers.
-pub type ThreadId = u8;
+pub(crate) type ThreadId = u8;
 
-pub const MAX_PLY: usize = 64;
+pub(crate) const MAX_PLY: usize = 64;
 
 const INF: i32 = 32_000;
 const ASPIRATION_DELTA: i32 = 16;
 
 /// Lazy SMP depth-skip pattern. Helper threads (id ≥ 1) deliberately skip selected
-/// iterative-deepening depths so that workers spread out across the depth axis instead of
-/// all racing on the same depth. Pattern from Stockfish's classic Lazy SMP scheme.
+/// iterative-deepening depths so that workers spread across the depth axis instead of
+/// all racing on the same depth.
 const SKIP_SIZE: [u8; 20] = [1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4];
 const SKIP_PHASE: [u8; 20] = [0, 1, 0, 1, 2, 3, 0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5, 6, 7];
 
@@ -64,16 +63,12 @@ pub struct SearchInfo {
     pub nps: u64,
 }
 
-impl SearchInfo {
-    pub fn score_cp(&self) -> i32 { self.score }
-}
-
-pub struct History {
-    pub killers: [[Move; 2]; MAX_PLY],
-    pub butterfly: Box<[[i32; 90]; Piece::COUNT]>,
+pub(crate) struct History {
+    pub(crate) killers: [[Move; 2]; MAX_PLY],
+    pub(crate) butterfly: Box<[[i32; 90]; Piece::COUNT]>,
     /// Countermove table: `countermove[prev_piece_idx][prev_to_sq]` = the best quiet reply
     /// we've seen after a move made by `prev_piece` that ended on `prev_to`.
-    pub countermove: Box<[[Move; 90]; Piece::COUNT]>,
+    pub(crate) countermove: Box<[[Move; 90]; Piece::COUNT]>,
 }
 
 impl Default for History {
@@ -81,7 +76,7 @@ impl Default for History {
 }
 
 impl History {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         History {
             killers: [[Move::NULL; 2]; MAX_PLY],
             butterfly: Box::new([[0; 90]; Piece::COUNT]),
@@ -89,7 +84,7 @@ impl History {
         }
     }
 
-    pub fn clear(&mut self) {
+    pub(crate) fn clear(&mut self) {
         self.killers = [[Move::NULL; 2]; MAX_PLY];
         for row in self.butterfly.iter_mut() {
             *row = [0; 90];
@@ -100,7 +95,7 @@ impl History {
     }
 
     #[inline]
-    pub fn update_killer(&mut self, ply: usize, mv: Move) {
+    pub(crate) fn update_killer(&mut self, ply: usize, mv: Move) {
         if ply >= MAX_PLY {
             return;
         }
@@ -111,7 +106,7 @@ impl History {
     }
 
     #[inline]
-    pub fn update_history(&mut self, piece: Piece, dst_sq: u8, bonus: i32) {
+    pub(crate) fn update_history(&mut self, piece: Piece, dst_sq: u8, bonus: i32) {
         let row = &mut self.butterfly[piece.index()];
         let entry = &mut row[dst_sq as usize];
         // Exponential-decay update: `h += bonus - h * |bonus| / MAX`, keeps values bounded.
@@ -121,12 +116,12 @@ impl History {
     }
 
     #[inline]
-    pub fn update_countermove(&mut self, prev_piece: Piece, prev_to: u8, reply: Move) {
+    pub(crate) fn update_countermove(&mut self, prev_piece: Piece, prev_to: u8, reply: Move) {
         self.countermove[prev_piece.index()][prev_to as usize] = reply;
     }
 
     #[inline]
-    pub fn countermove_for(&self, prev_piece: Piece, prev_to: u8) -> Move {
+    pub(crate) fn countermove_for(&self, prev_piece: Piece, prev_to: u8) -> Move {
         self.countermove[prev_piece.index()][prev_to as usize]
     }
 }
@@ -135,13 +130,13 @@ const MAX_HISTORY: i32 = 1 << 14;
 
 /// One search invocation. Owns per-thread scratch (history, PV, key stack) and borrows the
 /// shared TT via `Arc`, allowing Lazy SMP worker threads to share a single table.
-pub struct Search<'a> {
+pub(crate) struct Search<'a> {
     pos: &'a mut Position,
     tt: Arc<TranspositionTable>,
     history: History,
     stop: Arc<AtomicBool>,
 
-    pub thread_id: ThreadId,
+    pub(crate) thread_id: ThreadId,
     start: Instant,
     soft_limit: Option<Duration>,
     hard_limit: Option<Duration>,
@@ -176,7 +171,7 @@ struct PlyMeta {
 }
 
 impl<'a> Search<'a> {
-    pub fn new(pos: &'a mut Position, tt: Arc<TranspositionTable>, stop: Arc<AtomicBool>) -> Self {
+    pub(crate) fn new(pos: &'a mut Position, tt: Arc<TranspositionTable>, stop: Arc<AtomicBool>) -> Self {
         Search {
             pos,
             tt,
@@ -202,7 +197,7 @@ impl<'a> Search<'a> {
     /// Pre-populate the repetition history with zobrist keys seen prior to the current
     /// search. Callers pass `Engine::game_key_history()` here so 3-fold draws that span
     /// across search invocations are detected correctly.
-    pub fn seed_game_history(&mut self, keys: &[u64]) {
+    pub(crate) fn seed_game_history(&mut self, keys: &[u64]) {
         self.key_stack.clear();
         self.key_stack.extend_from_slice(keys);
         // We don't have per-move metadata for historical plies — treat them conservatively
@@ -214,7 +209,7 @@ impl<'a> Search<'a> {
 
     /// Run the iterative-deepening search. `callback` is invoked once per completed
     /// iteration (useful for streaming depth/score/pv to the caller).
-    pub fn run(mut self, limits: Limits, mut callback: impl FnMut(&SearchInfo)) -> SearchInfo {
+    pub(crate) fn run(mut self, limits: Limits, mut callback: impl FnMut(&SearchInfo)) -> SearchInfo {
         self.start = Instant::now();
         self.nodes = 0;
         self.max_depth = limits.max_depth.clamp(1, MAX_SEARCH_DEPTH);
@@ -390,11 +385,10 @@ impl<'a> Search<'a> {
         0
     }
 
-    /// Map repetition flags to a search score, matching the Java reference engine's
-    /// `repValue()`. `ply` is the current search depth so that mate-distance scores decay
-    /// cleanly along the PV.
+    /// Map repetition flags to a search score. `ply` scales the penalty so that
+    /// mate-distance scores decay cleanly along the PV.
     fn rep_value(&self, flags: u32, ply: u32) -> i32 {
-        let ban = ply as i32 - BAN_VALUE; // matches V1's banValue(distance)
+        let ban = ply as i32 - BAN_VALUE;
         let mut v = 0;
         if flags & 2 != 0 {
             v += ban; // we are the chaser → heavy penalty on ourselves
@@ -896,9 +890,3 @@ fn lmr(depth: i32, move_count: u32, is_pv: bool) -> i32 {
     }
     (r as i32).max(0)
 }
-
-// Silence unused warnings if some constants become conditionally referenced.
-const _: () = {
-    let _ = DRAW_VALUE;
-    let _ = BAN_VALUE;
-};

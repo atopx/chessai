@@ -1,5 +1,4 @@
 use crate::bitboard::BitBoard;
-use crate::bitboard::Direction;
 use crate::bitboard::HOME_HALVES;
 use crate::bitboard::PALACES;
 use crate::color::Color;
@@ -27,17 +26,6 @@ pub const KNIGHT_RAYS: [[RayEntry; 4]; 90] = build_knight_rays();
 // ====================== Runtime attack computation ======================
 
 #[inline]
-pub fn king_attacks_mask(sq: Square, own: BitBoard) -> BitBoard { KING_ATTACKS[sq.raw() as usize] - own }
-
-#[inline]
-pub fn advisor_attacks_mask(sq: Square, own: BitBoard) -> BitBoard { ADVISOR_ATTACKS[sq.raw() as usize] - own }
-
-#[inline]
-pub fn pawn_attacks_mask(color: Color, sq: Square, own: BitBoard) -> BitBoard {
-    PAWN_ATTACKS[color.index()][sq.raw() as usize] - own
-}
-
-#[inline]
 pub fn bishop_attacks(sq: Square, occ: BitBoard) -> BitBoard {
     let mut att = BitBoard::EMPTY;
     for entry in BISHOP_RAYS[sq.raw() as usize].iter() {
@@ -63,76 +51,6 @@ pub fn knight_attacks(sq: Square, occ: BitBoard) -> BitBoard {
         }
     }
     att
-}
-
-/// Rook attacks via bitboard raycasting in four orthogonal directions.
-#[inline]
-pub fn rook_attacks(sq: Square, occ: BitBoard) -> BitBoard {
-    let mut att = BitBoard::EMPTY;
-    for dir in Direction::ORTHO {
-        att |= rook_ray(sq, occ, dir);
-    }
-    att
-}
-
-#[inline]
-fn rook_ray(sq: Square, occ: BitBoard, dir: Direction) -> BitBoard {
-    let mut bb = BitBoard::from_square(sq);
-    let mut acc = BitBoard::EMPTY;
-    loop {
-        bb = bb.shift(dir);
-        if bb.is_empty() {
-            return acc;
-        }
-        acc |= bb;
-        if (bb & occ).any() {
-            return acc;
-        }
-    }
-}
-
-/// Cannon attacks: quiet destinations (empty line up to first blocker) ORed with capture
-/// destinations (first piece **after exactly one** blocker). Callers split quiet vs capture
-/// via a further `& opp` / `& !occ`.
-#[inline]
-pub fn cannon_attacks(sq: Square, occ: BitBoard) -> (BitBoard, BitBoard) {
-    let mut quiet = BitBoard::EMPTY;
-    let mut captures = BitBoard::EMPTY;
-    for dir in Direction::ORTHO {
-        let (q, c) = cannon_ray(sq, occ, dir);
-        quiet |= q;
-        captures |= c;
-    }
-    (quiet, captures)
-}
-
-#[inline]
-fn cannon_ray(sq: Square, occ: BitBoard, dir: Direction) -> (BitBoard, BitBoard) {
-    let mut bb = BitBoard::from_square(sq);
-    let mut quiet = BitBoard::EMPTY;
-
-    // Phase 1: walk until we hit the first screen.
-    loop {
-        bb = bb.shift(dir);
-        if bb.is_empty() {
-            return (quiet, BitBoard::EMPTY);
-        }
-        if (bb & occ).any() {
-            break;
-        }
-        quiet |= bb;
-    }
-
-    // Phase 2: walk past empty squares until we hit the capture target (or edge).
-    loop {
-        bb = bb.shift(dir);
-        if bb.is_empty() {
-            return (quiet, BitBoard::EMPTY);
-        }
-        if (bb & occ).any() {
-            return (quiet, bb);
-        }
-    }
 }
 
 // ====================== Table builders (const fn) ======================
@@ -439,38 +357,17 @@ mod tests {
 
     #[test]
     fn bishop_never_crosses_river() {
+        let red_half = HOME_HALVES[Color::Red.index()];
         for sq_raw in 0..90u8 {
             let sq = Square::new_unchecked(sq_raw);
+            let src_is_red_half = red_half.has(sq);
             for entry in BISHOP_RAYS[sq_raw as usize].iter() {
                 if entry.destinations.is_empty() {
                     continue;
                 }
                 let dst_sq = entry.destinations.lsb_square();
-                assert!(Square::is_home_half(sq, Color::Red) == Square::is_home_half(dst_sq, Color::Red));
+                assert_eq!(src_is_red_half, red_half.has(dst_sq));
             }
         }
-    }
-
-    #[test]
-    fn rook_full_board_has_17_targets() {
-        let s = Square::from_iccs("a0").unwrap();
-        let att = rook_attacks(s, BitBoard::EMPTY);
-        // 9 squares on rank 0 (minus own) + 10 squares on file a (minus own) = 17.
-        assert_eq!(att.popcount(), 17);
-    }
-
-    #[test]
-    fn cannon_jumps_over_exactly_one_screen() {
-        // Cannon on a0, screen on a3, target on a5.
-        let src = Square::from_iccs("a0").unwrap();
-        let screen = Square::from_iccs("a3").unwrap();
-        let target = Square::from_iccs("a5").unwrap();
-        let occ = BitBoard::from_square(screen) | BitBoard::from_square(target);
-        let (quiet, cap) = cannon_attacks(src, occ);
-        assert!(!quiet.has(screen)); // cannot land on own screen
-        assert!(cap.has(target)); // captures target past screen
-        // Quiet targets: everything on file/rank between src and first screen (exclusive).
-        assert!(quiet.has(Square::from_iccs("a1").unwrap()));
-        assert!(quiet.has(Square::from_iccs("a2").unwrap()));
     }
 }

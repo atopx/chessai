@@ -14,43 +14,37 @@ use crate::piece::PieceType;
 use crate::position::Position;
 use crate::square::Square;
 
-pub const MAX_MOVES: usize = 128;
+pub(crate) const MAX_MOVES: usize = 128;
 
 /// Fixed-capacity move list. Consumers treat it as a slice via `Deref`/`Index`.
 #[derive(Clone)]
-pub struct MoveList {
+pub(crate) struct MoveList {
     moves: [Move; MAX_MOVES],
     len: u8,
 }
 
 impl MoveList {
     #[inline]
-    pub const fn new() -> Self { MoveList { moves: [Move::NULL; MAX_MOVES], len: 0 } }
+    pub(crate) const fn new() -> Self { MoveList { moves: [Move::NULL; MAX_MOVES], len: 0 } }
 
     #[inline]
-    pub fn len(&self) -> usize { self.len as usize }
+    pub(crate) fn len(&self) -> usize { self.len as usize }
 
     #[inline]
-    pub fn is_empty(&self) -> bool { self.len == 0 }
+    pub(crate) fn as_slice(&self) -> &[Move] { &self.moves[..self.len as usize] }
 
     #[inline]
-    pub fn as_slice(&self) -> &[Move] { &self.moves[..self.len as usize] }
+    pub(crate) fn iter(&self) -> std::slice::Iter<'_, Move> { self.as_slice().iter() }
 
     #[inline]
-    pub fn iter(&self) -> std::slice::Iter<'_, Move> { self.as_slice().iter() }
-
-    #[inline]
-    pub fn push(&mut self, mv: Move) {
+    pub(crate) fn push(&mut self, mv: Move) {
         debug_assert!((self.len as usize) < MAX_MOVES);
         self.moves[self.len as usize] = mv;
         self.len += 1;
     }
 
     #[inline]
-    pub fn swap(&mut self, i: usize, j: usize) { self.moves.swap(i, j); }
-
-    #[inline]
-    pub fn clear(&mut self) { self.len = 0; }
+    pub(crate) fn clear(&mut self) { self.len = 0; }
 
     #[inline]
     fn push_from_bb(&mut self, src: Square, mut bb: BitBoard) {
@@ -80,7 +74,7 @@ impl<'a> IntoIterator for &'a MoveList {
 // Pseudo-legal generation
 // ======================================================================
 
-pub fn generate_pseudo(pos: &Position, out: &mut MoveList) {
+pub(crate) fn generate_pseudo(pos: &Position, out: &mut MoveList) {
     out.clear();
     let stm = pos.side_to_move();
     let own = pos.color_occupancy(stm);
@@ -138,7 +132,7 @@ pub fn generate_pseudo(pos: &Position, out: &mut MoveList) {
 
 /// Pseudo-legal moves that land on an enemy piece (captures only). Used by the staged
 /// move picker so that an early TT-cutoff doesn't pay the cost of generating quiets.
-pub fn generate_captures(pos: &Position, out: &mut MoveList) {
+pub(crate) fn generate_captures(pos: &Position, out: &mut MoveList) {
     out.clear();
     let stm = pos.side_to_move();
     let own = pos.color_occupancy(stm);
@@ -180,7 +174,7 @@ pub fn generate_captures(pos: &Position, out: &mut MoveList) {
 
 /// Pseudo-legal moves that land on an empty square (non-captures). Complement of
 /// `generate_captures`; their union equals `generate_pseudo`.
-pub fn generate_quiets(pos: &Position, out: &mut MoveList) {
+pub(crate) fn generate_quiets(pos: &Position, out: &mut MoveList) {
     out.clear();
     let stm = pos.side_to_move();
     let own = pos.color_occupancy(stm);
@@ -221,45 +215,17 @@ pub fn generate_quiets(pos: &Position, out: &mut MoveList) {
     let _ = own; // unused — every "& empties" implicitly excludes own pieces
 }
 
-// ======================================================================
-// Legal filter
-// ======================================================================
-
-/// Iterate every pseudo-legal move and keep the ones that don't leave `stm` in check.
-pub fn generate_legal(pos: &mut Position, out: &mut MoveList) {
-    let mut pseudo = MoveList::new();
-    generate_pseudo(pos, &mut pseudo);
-    out.clear();
-    let stm = pos.side_to_move();
-    for mv in pseudo.iter() {
-        let info = pos.make_move(*mv);
-        if !pos.is_in_check(stm) {
-            out.push(*mv);
-        }
-        pos.undo_move(*mv, info);
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::fen::STARTING_FEN;
 
     #[test]
-    fn startpos_pseudo_legal_count_matches_v1() {
+    fn startpos_has_44_pseudo_legal_moves() {
         let p = Position::from_fen(STARTING_FEN).unwrap();
         let mut ml = MoveList::new();
         generate_pseudo(&p, &mut ml);
-        // Reference: V1 produced 44 pseudo-legal moves from the start. Same number expected.
         assert_eq!(ml.len(), 44, "moves generated: {}", ml.len());
-    }
-
-    #[test]
-    fn startpos_legal_count_is_44() {
-        let mut p = Position::from_fen(STARTING_FEN).unwrap();
-        let mut ml = MoveList::new();
-        generate_legal(&mut p, &mut ml);
-        assert_eq!(ml.len(), 44);
     }
 
     #[test]
@@ -302,7 +268,7 @@ mod tests {
             let victim = pos.piece_at(mv.dst()).expect("capture must land on a piece");
             assert_ne!(victim.color(), pos.side_to_move(), "captured own piece");
         }
-        assert!(!caps.is_empty(), "this position has at least one capture");
+        assert!(caps.len() > 0, "this position has at least one capture");
     }
 
     #[test]

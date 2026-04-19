@@ -6,9 +6,10 @@ use crate::util::Rc4;
 use crate::util::SplitMix64;
 
 pub struct ZobristTables {
-    /// TT key tables. `[piece_index][square]`.
+    /// Transposition-table keys, indexed as `[piece_index][square]`.
     pub key_piece: [[u64; Square::COUNT]; Piece::COUNT],
-    /// Book-compat lock tables (matches Java RC4 stream, but re-indexed to `0..90`).
+    /// Opening-book lock table. Values are drawn from the book's RC4 stream and re-indexed
+    /// from the on-disk 16-wide mailbox to our compact `0..90` square layout.
     pub lock_piece: [[u32; Square::COUNT]; Piece::COUNT],
     pub key_stm: u64,
     pub lock_stm: u32,
@@ -16,57 +17,60 @@ pub struct ZobristTables {
 
 pub static ZOBRIST: LazyLock<ZobristTables> = LazyLock::new(build);
 
-fn build() -> ZobristTables {
-    // 1. Replay the exact RC4 stream used by the Java engine to produce per-mailbox keys.
-    let mut rc4 = Rc4::new(&[0]);
-    let _java_key_player_u32 = rc4.next_u32();
-    let _ = rc4.next_u32();
-    let java_lock_player_u32 = rc4.next_u32();
+/// Book file mailbox row stride (16 cells per row, 3-cell border on each side).
+const BOOK_MAILBOX_STRIDE: u8 = 16;
+/// Topmost playable rank in the book mailbox (the book stores the board rank-flipped).
+const BOOK_RANK_TOP: u8 = 12;
+/// Leftmost playable file in the book mailbox layout.
+const BOOK_FILE_OFFSET: u8 = 3;
 
-    let mut java_lock_256 = [[0u32; 256]; 14];
-    for row in java_lock_256.iter_mut() {
+fn build() -> ZobristTables {
+    // Step 1: drain the RC4 stream that the embedded book was built against, so lock values
+    // for identical positions agree bit-for-bit with the book entries.
+    let mut rc4 = Rc4::new(&[0]);
+    let _ = rc4.next_u32(); // unused side-to-move key (book only needs the lock)
+    let _ = rc4.next_u32();
+    let lock_stm = rc4.next_u32();
+
+    let mut lock_mailbox = [[0u32; 256]; Piece::COUNT];
+    for row in lock_mailbox.iter_mut() {
         for slot in row.iter_mut() {
-            let _key = rc4.next_u32();
+            let _ = rc4.next_u32(); // unused key word
             let _ = rc4.next_u32();
             *slot = rc4.next_u32();
         }
     }
 
-    // 2. Compress to 0..90 using the legacy mailbox mapping:
-    //    Java mailbox square = (rank + 3) * 16 + (file + 3),
-    //    where rank = 3..=12 maps to the top-down FEN rows.
-    //    V2 rank 0 is red's back (bottom), rank 9 is black's back (top), so
-    //    `java_rank = 3 + (9 - v2_rank) = 12 - v2_rank`.
-    let mut lock_piece = [[0u32; 90]; 14];
+    // Step 2: project each piece/square into the book's mailbox indexing (rank flipped,
+    // 3-cell border on each side) so that a mirrored scan of our 0..=89 layout reproduces
+    // the original lock values.
+    let mut lock_piece = [[0u32; Square::COUNT]; Piece::COUNT];
     for color in 0..2 {
         for kind in 0..7 {
-            // Java piece index order: 0..=6 red, 7..=13 black.
-            let java_idx = color * 7 + kind;
-            // V2 piece index uses the same order (see `Piece::index`).
-            let v2_idx = java_idx;
-            for v2_sq in 0..90u8 {
-                let v2_rank = v2_sq / 9;
-                let v2_file = v2_sq % 9;
-                let java_rank = 12 - v2_rank;
-                let java_file = v2_file + 3;
-                let java_mailbox = ((java_rank) * 16 + java_file) as usize;
-                lock_piece[v2_idx][v2_sq as usize] = java_lock_256[java_idx][java_mailbox];
+            let piece_idx = color * 7 + kind;
+            for sq in 0..Square::COUNT as u8 {
+                let rank = sq / 9;
+                let file = sq % 9;
+                let book_rank = BOOK_RANK_TOP - rank;
+                let book_file = file + BOOK_FILE_OFFSET;
+                let book_mailbox = (book_rank * BOOK_MAILBOX_STRIDE + book_file) as usize;
+                lock_piece[piece_idx][sq as usize] = lock_mailbox[piece_idx][book_mailbox];
             }
         }
     }
 
-    // 3. Generate fresh SplitMix64 keys for the TT. Seed arbitrary but fixed so tests are
-    //    reproducible across runs.
+    // Step 3: fresh 64-bit keys for the transposition table. Seed is arbitrary but fixed so
+    // tests are reproducible across runs.
     let mut rng = SplitMix64::new(0xA1B2_C3D4_E5F6_0718);
     let key_stm = rng.next_u64();
-    let mut key_piece = [[0u64; 90]; 14];
+    let mut key_piece = [[0u64; Square::COUNT]; Piece::COUNT];
     for row in key_piece.iter_mut() {
         for slot in row.iter_mut() {
             *slot = rng.next_u64();
         }
     }
 
-    ZobristTables { key_piece, lock_piece, key_stm, lock_stm: java_lock_player_u32 }
+    ZobristTables { key_piece, lock_piece, key_stm, lock_stm }
 }
 
 #[cfg(test)]

@@ -1,5 +1,5 @@
 use crate::color::Color;
-use crate::error::FenError;
+use crate::error::ChessAIError;
 use crate::piece::Piece;
 use crate::position::Position;
 use crate::square::Square;
@@ -7,10 +7,10 @@ use crate::square::Square;
 pub const STARTING_FEN: &str = "rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1";
 
 impl Position {
-    pub fn from_fen(fen: &str) -> Result<Position, FenError> {
+    pub fn from_fen(fen: &str) -> Result<Position, ChessAIError> {
         let fen = fen.trim();
         if fen.is_empty() {
-            return Err(FenError::Empty);
+            return Err(ChessAIError::EmptyFen);
         }
 
         let mut pos = Position::empty();
@@ -27,7 +27,7 @@ impl Position {
             match c {
                 '/' => {
                     if file > 9 {
-                        return Err(FenError::RankOverflow { rank: board_rank as u8 });
+                        return Err(ChessAIError::FenRankOverflow { rank: board_rank as u8 });
                     }
                     board_rank -= 1;
                     file = 0;
@@ -35,28 +35,28 @@ impl Position {
                 '1'..='9' => {
                     file += b - b'0';
                     if file > 9 {
-                        return Err(FenError::RankOverflow { rank: board_rank as u8 });
+                        return Err(ChessAIError::FenRankOverflow { rank: board_rank as u8 });
                     }
                 }
                 'A'..='Z' | 'a'..='z' => {
                     if file >= 9 {
-                        return Err(FenError::RankOverflow { rank: board_rank as u8 });
+                        return Err(ChessAIError::FenRankOverflow { rank: board_rank as u8 });
                     }
                     if board_rank < 0 {
-                        return Err(FenError::InvalidChar { c, index: i });
+                        return Err(ChessAIError::InvalidFenChar { c, index: i });
                     }
-                    let piece = Piece::from_fen_char(c).ok_or(FenError::InvalidChar { c, index: i })?;
-                    let sq =
-                        Square::from_rank_file(board_rank as u8, file).ok_or(FenError::InvalidChar { c, index: i })?;
+                    let piece = Piece::from_fen_char(c).ok_or(ChessAIError::InvalidFenChar { c, index: i })?;
+                    let sq = Square::from_rank_file(board_rank as u8, file)
+                        .ok_or(ChessAIError::InvalidFenChar { c, index: i })?;
                     pos.put(sq, piece);
                     file += 1;
                 }
-                _ => return Err(FenError::InvalidChar { c, index: i }),
+                _ => return Err(ChessAIError::InvalidFenChar { c, index: i }),
             }
         }
 
         if board_rank > 0 {
-            return Err(FenError::RankUnderflow);
+            return Err(ChessAIError::FenRankUnderflow);
         }
 
         let mut it = rest.split_ascii_whitespace();
@@ -66,7 +66,7 @@ impl Position {
                 "b" | "B" => Color::Black,
                 _ => {
                     let marker = stm.chars().next().unwrap_or('?');
-                    return Err(FenError::BadSide { marker });
+                    return Err(ChessAIError::BadSideToMove { marker });
                 }
             };
             pos.set_side_to_move(side);
@@ -130,6 +130,6 @@ mod tests {
 
     #[test]
     fn invalid_char_rejected() {
-        assert!(matches!(Position::from_fen("zzz"), Err(FenError::InvalidChar { .. })));
+        assert!(matches!(Position::from_fen("zzz"), Err(ChessAIError::InvalidFenChar { .. })));
     }
 }

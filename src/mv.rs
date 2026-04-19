@@ -1,7 +1,7 @@
 use std::fmt;
 use std::str::FromStr;
 
-use crate::error::MoveParseError;
+use crate::error::ChessAIError;
 use crate::square::Square;
 
 #[derive(Copy, Clone, Debug, Default, Hash, PartialEq, Eq)]
@@ -9,19 +9,19 @@ use crate::square::Square;
 pub struct Move(u16);
 
 impl Move {
-    pub const NULL: Move = Move(0);
+    pub(crate) const NULL: Move = Move(0);
 
     #[inline]
-    pub const fn new(src: Square, dst: Square) -> Move { Move((src.raw() as u16) | ((dst.raw() as u16) << 7)) }
+    pub(crate) const fn new(src: Square, dst: Square) -> Move { Move((src.raw() as u16) | ((dst.raw() as u16) << 7)) }
 
     #[inline]
-    pub const fn from_raw(raw: u16) -> Move { Move(raw) }
+    pub(crate) const fn from_raw(raw: u16) -> Move { Move(raw) }
 
     #[inline]
-    pub const fn raw(self) -> u16 { self.0 }
+    pub(crate) const fn raw(self) -> u16 { self.0 }
 
     #[inline]
-    pub const fn is_null(self) -> bool { self.0 == 0 }
+    pub(crate) const fn is_null(self) -> bool { self.0 == 0 }
 
     #[inline]
     pub const fn src(self) -> Square { Square::new_unchecked((self.0 & 0x7f) as u8) }
@@ -31,17 +31,17 @@ impl Move {
 
     /// Mirror the move horizontally (file reflection). Used by the opening book.
     #[inline]
-    pub const fn mirror_file(self) -> Move { Move::new(self.src().mirror_file(), self.dst().mirror_file()) }
+    pub(crate) const fn mirror_file(self) -> Move { Move::new(self.src().mirror_file(), self.dst().mirror_file()) }
 
     /// Parses both `b2-e2` and `b2e2` (case-insensitive) ICCS forms.
-    pub fn from_iccs(s: &str) -> Result<Move, MoveParseError> {
+    pub fn from_iccs(s: &str) -> Result<Move, ChessAIError> {
         let s = s.trim();
         let (a, b) = if let Some((a, b)) = s.split_once('-') {
             (a, b)
         } else if s.len() == 4 {
             (&s[..2], &s[2..])
         } else {
-            return Err(MoveParseError::BadMove(s.to_string()));
+            return Err(ChessAIError::BadIccsMove(s.to_string()));
         };
         let src = Square::from_iccs(a)?;
         let dst = Square::from_iccs(b)?;
@@ -66,8 +66,8 @@ impl fmt::Display for Move {
 }
 
 impl FromStr for Move {
-    type Err = MoveParseError;
-    fn from_str(s: &str) -> Result<Move, MoveParseError> { Move::from_iccs(s) }
+    type Err = ChessAIError;
+    fn from_str(s: &str) -> Result<Move, ChessAIError> { Move::from_iccs(s) }
 }
 
 #[cfg(test)]

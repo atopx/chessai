@@ -1,4 +1,3 @@
-use crate::bitboard::BitBoard;
 use crate::mv::Move;
 use crate::position::Position;
 use crate::square::Square;
@@ -7,14 +6,14 @@ use crate::util::SplitMix64;
 const MAX_BOOK_SIZE: usize = 16_384;
 const BOOK_BYTES: &[u8] = include_bytes!("../assets/BOOK.DAT");
 
-pub struct Book {
+pub(crate) struct Book {
     locks: Vec<u32>,
-    moves: Vec<u16>, // already translated to V2 format; 0 when the V1 entry is invalid.
+    moves: Vec<u16>,
     values: Vec<i16>,
 }
 
 impl Book {
-    pub fn embedded() -> Self {
+    pub(crate) fn embedded() -> Self {
         let chunk = 8usize;
         let total = (BOOK_BYTES.len() / chunk).min(MAX_BOOK_SIZE);
         let mut locks = Vec::with_capacity(total);
@@ -24,21 +23,17 @@ impl Book {
             let off = i * chunk;
             let lock =
                 u32::from_le_bytes([BOOK_BYTES[off], BOOK_BYTES[off + 1], BOOK_BYTES[off + 2], BOOK_BYTES[off + 3]]);
-            let v1_mv = u16::from_le_bytes([BOOK_BYTES[off + 4], BOOK_BYTES[off + 5]]);
+            let raw_mv = u16::from_le_bytes([BOOK_BYTES[off + 4], BOOK_BYTES[off + 5]]);
             let val = i16::from_le_bytes([BOOK_BYTES[off + 6], BOOK_BYTES[off + 7]]);
             locks.push(lock >> 1);
-            moves.push(v1_move_to_v2(v1_mv));
+            moves.push(decode_book_move(raw_mv));
             values.push(val);
         }
         Book { locks, moves, values }
     }
 
-    pub fn len(&self) -> usize { self.locks.len() }
-
-    pub fn is_empty(&self) -> bool { self.locks.is_empty() }
-
     /// Probe with deterministic weighted sampling. `None` when no entry matches.
-    pub fn probe(&self, pos: &Position, rng: &mut SplitMix64) -> Option<Move> {
+    pub(crate) fn probe(&self, pos: &Position, rng: &mut SplitMix64) -> Option<Move> {
         if self.locks.is_empty() {
             return None;
         }
@@ -111,7 +106,8 @@ impl Book {
 
 fn find_lock(locks: &[u32], key: u32) -> Option<usize> { locks.binary_search(&key).ok() }
 
-/// Compute the Zobrist lock of the horizontally mirrored position, matching V1 semantics.
+/// Compute the Zobrist lock of the horizontally mirrored position so openings that are only
+/// stored on one side of the file axis still match.
 fn mirror_position_lock(pos: &Position) -> u32 {
     let mut mirrored = Position::empty();
     for sq_raw in 0..Square::COUNT as u8 {
@@ -126,29 +122,25 @@ fn mirror_position_lock(pos: &Position) -> u32 {
     mirrored.zobrist_lock() >> 1
 }
 
-/// Translate a V1 16-bit move (two 8-bit mailbox squares) to a V2 Move. Returns
-/// `0` (Move::NULL) when any endpoint is off-board; the caller treats null as "skip entry".
-fn v1_move_to_v2(raw: u16) -> u16 {
-    let v1_src = (raw & 0xff) as u8;
-    let v1_dst = ((raw >> 8) & 0xff) as u8;
-    match (v1_to_v2_square(v1_src), v1_to_v2_square(v1_dst)) {
-        (Some(src), Some(dst)) => {
-            let mv = Move::new(Square::new_unchecked(src), Square::new_unchecked(dst));
-            mv.raw()
-        }
+/// Decode a packed 16-bit book move (two 8-bit mailbox squares) into our compact `Move`
+/// encoding. Returns `0` (`Move::NULL`) when any endpoint falls in the mailbox border; the
+/// caller treats null as "skip entry".
+fn decode_book_move(raw: u16) -> u16 {
+    let raw_src = (raw & 0xff) as u8;
+    let raw_dst = ((raw >> 8) & 0xff) as u8;
+    match (decode_book_square(raw_src), decode_book_square(raw_dst)) {
+        (Some(src), Some(dst)) => Move::new(Square::new_unchecked(src), Square::new_unchecked(dst)).raw(),
         _ => 0,
     }
 }
 
-/// V1 mailbox index → V2 compact square. `None` for off-board indices.
-fn v1_to_v2_square(v1: u8) -> Option<u8> {
-    let rank = v1 >> 4;
-    let file = v1 & 0x0f;
+/// Map a mailbox square from the book's on-disk 16×16 grid to our compact `0..90` index.
+/// Returns `None` for off-board indices.
+fn decode_book_square(raw: u8) -> Option<u8> {
+    let rank = raw >> 4;
+    let file = raw & 0x0f;
     if (3..=12).contains(&rank) && (3..=11).contains(&file) { Some((12 - rank) * 9 + (file - 3)) } else { None }
 }
-
-// Silence unused-BB lint if the mirror helper is optimised out under certain features.
-const _: BitBoard = BitBoard::EMPTY;
 
 #[cfg(test)]
 mod tests {
@@ -158,7 +150,7 @@ mod tests {
     #[test]
     fn book_loads_with_many_entries() {
         let b = Book::embedded();
-        assert!(b.len() > 1000);
+        assert!(b.locks.len() > 1000);
     }
 
     #[test]

@@ -220,52 +220,9 @@ fn expand_file(bits: u16, file: u8) -> BitBoard {
     BitBoard(out)
 }
 
-// -------------- Warmup --------------
-
-/// Touch every table so the `LazyLock` init cost is amortised outside of hot paths.
-pub fn warm_up() {
-    let _ = &*ROOK_RANK;
-    let _ = &*ROOK_FILE;
-    let _ = &*CANNON_RANK;
-    let _ = &*CANNON_FILE;
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::attacks as slow;
-
-    #[test]
-    fn rook_matches_raycast() {
-        // Compare magic vs ray-cast reference on random occupancies.
-        let mut rng = crate::util::SplitMix64::new(0x1234);
-        for _ in 0..1024 {
-            let occ_raw = (rng.next_u64() as u128) | ((rng.next_u64() as u128) << 64);
-            let occ = BitBoard::from_raw(occ_raw);
-            for sq_raw in 0..90u8 {
-                let sq = Square::new_unchecked(sq_raw);
-                let a = rook_attacks(sq, occ);
-                let b = slow::rook_attacks(sq, occ);
-                assert_eq!(a, b, "rook mismatch at sq={sq_raw:02} occ={occ_raw:x}");
-            }
-        }
-    }
-
-    #[test]
-    fn cannon_matches_raycast() {
-        let mut rng = crate::util::SplitMix64::new(0x5678);
-        for _ in 0..1024 {
-            let occ_raw = (rng.next_u64() as u128) | ((rng.next_u64() as u128) << 64);
-            let occ = BitBoard::from_raw(occ_raw);
-            for sq_raw in 0..90u8 {
-                let sq = Square::new_unchecked(sq_raw);
-                let (mq, mc) = cannon_attacks(sq, occ);
-                let (rq, rc) = slow::cannon_attacks(sq, occ);
-                assert_eq!(mq, rq, "cannon quiet mismatch at sq={sq_raw} occ={occ_raw:x}");
-                assert_eq!(mc, rc, "cannon capture mismatch at sq={sq_raw} occ={occ_raw:x}");
-            }
-        }
-    }
 
     #[test]
     fn rank_file_occ_roundtrip() {

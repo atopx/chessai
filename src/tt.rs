@@ -8,7 +8,7 @@ use crate::mv::Move;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[repr(u8)]
-pub enum Bound {
+pub(crate) enum Bound {
     Exact = 0,
     Alpha = 1,
     Beta = 2,
@@ -27,12 +27,11 @@ impl Bound {
 
 /// Decoded TT entry view returned from `probe`.
 #[derive(Copy, Clone, Debug)]
-pub struct TtHit {
-    pub mv: Move,
-    pub value: i32,
-    pub depth: i32,
-    pub bound: Bound,
-    pub age: u8,
+pub(crate) struct TtHit {
+    pub(crate) mv: Move,
+    pub(crate) value: i32,
+    pub(crate) depth: i32,
+    pub(crate) bound: Bound,
 }
 
 /// Packed 48-bit payload layout (bits 0..48 of `data`):
@@ -61,7 +60,7 @@ fn unpack_bound(data: u64) -> Bound { Bound::from_u8(((data >> 40) & 0b11) as u8
 #[inline]
 fn unpack_age(data: u64) -> u8 { ((data >> 42) & 0x3f) as u8 }
 
-pub struct TtEntry {
+pub(crate) struct TtEntry {
     key_xor_data: AtomicU64,
     data: AtomicU64,
 }
@@ -87,7 +86,6 @@ impl TtEntry {
             value: unpack_value(data) as i32,
             depth: unpack_depth(data) as i32,
             bound: unpack_bound(data),
-            age: unpack_age(data),
         })
     }
 
@@ -96,10 +94,10 @@ impl TtEntry {
 
     #[inline]
     fn store(&self, key: u64, data: u64) {
-        // Stockfish/Cheng convention: write `data` LAST so the torn window exposes
-        // (new_data, old_key_xor). The reader loads `data` first; if it observes the new
-        // data before the matching key_xor, the XOR identity (key_xor ^ data == key) fails
-        // against either the new or old key and the entry is treated as a miss.
+        // XOR-validation lock-free write: store `data` first, then `key ^ data`. A racing
+        // reader that loads the new `data` before the updated `key_xor_data` fails the
+        // identity `key_xor_data ^ data == key` and treats the slot as a miss, so no torn
+        // read is ever accepted as valid.
         self.data.store(data, Ordering::Relaxed);
         self.key_xor_data.store(key ^ data, Ordering::Relaxed);
     }
@@ -111,11 +109,11 @@ impl Default for TtEntry {
 
 #[repr(align(64))]
 #[derive(Default)]
-pub struct Cluster {
+pub(crate) struct Cluster {
     entries: [TtEntry; 4],
 }
 
-pub struct TranspositionTable {
+pub(crate) struct TranspositionTable {
     clusters: Box<[Cluster]>,
     mask: usize,
     age: AtomicU64, // 6-bit value; AtomicU64 chosen for simple fetch_add ergonomics
@@ -124,7 +122,7 @@ pub struct TranspositionTable {
 impl TranspositionTable {
     /// Build a table sized to at most `size_bytes`, rounded down to a power-of-two number
     /// of 64-byte clusters.
-    pub fn new(size_bytes: usize) -> Self {
+    pub(crate) fn new(size_bytes: usize) -> Self {
         let min_clusters = 1024usize;
         let cluster_size = std::mem::size_of::<Cluster>();
         let wanted = (size_bytes / cluster_size).max(min_clusters);
@@ -141,7 +139,7 @@ impl TranspositionTable {
         TranspositionTable { clusters: v.into_boxed_slice(), mask: clusters - 1, age: AtomicU64::new(0) }
     }
 
-    pub fn clear(&mut self) {
+    pub(crate) fn clear(&mut self) {
         for c in self.clusters.iter_mut() {
             for e in c.entries.iter_mut() {
                 e.key_xor_data.store(0, Ordering::Relaxed);
@@ -151,13 +149,11 @@ impl TranspositionTable {
         self.age.store(0, Ordering::Relaxed);
     }
 
-    pub fn bump_age(&self) { let _ = self.age.fetch_add(1, Ordering::Relaxed); }
+    pub(crate) fn bump_age(&self) { let _ = self.age.fetch_add(1, Ordering::Relaxed); }
 
     fn current_age(&self) -> u8 { (self.age.load(Ordering::Relaxed) & 0x3f) as u8 }
 
-    pub fn size_bytes(&self) -> usize { self.clusters.len() * std::mem::size_of::<Cluster>() }
-
-    pub fn cluster_count(&self) -> usize { self.clusters.len() }
+    pub(crate) fn size_bytes(&self) -> usize { self.clusters.len() * std::mem::size_of::<Cluster>() }
 
     #[inline]
     fn cluster(&self, key: u64) -> &Cluster { &self.clusters[(key as usize) & self.mask] }
@@ -166,7 +162,7 @@ impl TranspositionTable {
     /// so the cache line is hot when the child node probes the TT a few hundred cycles
     /// later. No-op on architectures without a stable prefetch intrinsic.
     #[inline]
-    pub fn prefetch(&self, key: u64) {
+    pub(crate) fn prefetch(&self, key: u64) {
         let idx = (key as usize) & self.mask;
         // SAFETY: `idx <= self.mask < self.clusters.len()`, and prefetch hints are defined
         // to never fault even on out-of-bounds addresses.
@@ -191,7 +187,7 @@ impl TranspositionTable {
     }
 
     /// Look up an entry. Returns the first matching cluster slot.
-    pub fn probe(&self, key: u64) -> Option<TtHit> {
+    pub(crate) fn probe(&self, key: u64) -> Option<TtHit> {
         let cluster = self.cluster(key);
         for entry in &cluster.entries {
             if let Some(hit) = entry.probe(key) {
@@ -201,7 +197,7 @@ impl TranspositionTable {
         None
     }
 
-    pub fn store(&self, key: u64, mv: Move, score: i32, depth: i32, bound: Bound, ply: u32) {
+    pub(crate) fn store(&self, key: u64, mv: Move, score: i32, depth: i32, bound: Bound, ply: u32) {
         let cluster = self.cluster(key);
         let age = self.current_age();
 
@@ -234,31 +230,12 @@ impl TranspositionTable {
         let packed = pack(mv.raw(), stored_score as i16, depth.clamp(-1, 127) as i8, bound, age);
         cluster.entries[victim].store(key, packed);
     }
-
-    /// Hash-fill estimate (0–1000). Probes up to 1000 clusters and reports the fraction of
-    /// entries that are non-empty in those clusters.
-    pub fn hashfull(&self) -> u32 {
-        let sample = self.clusters.len().min(1000);
-        if sample == 0 {
-            return 0;
-        }
-        let mut full = 0u32;
-        for cluster in self.clusters.iter().take(sample) {
-            for entry in &cluster.entries {
-                let data = entry.data.load(Ordering::Relaxed);
-                if data != 0 {
-                    full += 1;
-                }
-            }
-        }
-        full * 1000 / (sample as u32 * 4)
-    }
 }
 
 // ====================== Mate-distance score adjustments ======================
 
 #[inline]
-pub fn mate_score_to_tt(score: i32, ply: u32) -> i32 {
+pub(crate) fn mate_score_to_tt(score: i32, ply: u32) -> i32 {
     let p = ply as i32;
     if score > WIN_VALUE {
         score + p
@@ -270,7 +247,7 @@ pub fn mate_score_to_tt(score: i32, ply: u32) -> i32 {
 }
 
 #[inline]
-pub fn mate_score_from_tt(score: i32, ply: u32) -> i32 {
+pub(crate) fn mate_score_from_tt(score: i32, ply: u32) -> i32 {
     let p = ply as i32;
     if score > WIN_VALUE {
         if score <= BAN_VALUE { -MATE_VALUE } else { score - p }

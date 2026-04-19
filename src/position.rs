@@ -1,7 +1,6 @@
 use crate::attacks::bishop_attacks;
 use crate::attacks::knight_attacks;
 use crate::bitboard::BitBoard;
-use crate::bitboard::HOME_HALVES;
 use crate::color::Color;
 use crate::eval::psq_value;
 use crate::magic::cannon_attacks;
@@ -14,17 +13,17 @@ use crate::zobrist::ZOBRIST;
 
 /// Snapshot needed to undo a single ply.
 #[derive(Copy, Clone, Debug, Default)]
-pub struct UndoInfo {
-    pub captured: Option<Piece>,
-    pub key_before: u64,
-    pub lock_before: u32,
+pub(crate) struct UndoInfo {
+    pub(crate) captured: Option<Piece>,
+    pub(crate) key_before: u64,
+    pub(crate) lock_before: u32,
 }
 
 /// Snapshot for a null-move (pass).
 #[derive(Copy, Clone, Debug, Default)]
-pub struct NullUndo {
-    pub key_before: u64,
-    pub lock_before: u32,
+pub(crate) struct NullUndo {
+    pub(crate) key_before: u64,
+    pub(crate) lock_before: u32,
 }
 
 #[derive(Clone, Debug)]
@@ -59,7 +58,7 @@ impl Default for Position {
 }
 
 impl Position {
-    pub const fn empty() -> Self {
+    pub(crate) const fn empty() -> Self {
         Position {
             color_bb: [BitBoard::EMPTY; 2],
             piece_bb: [BitBoard::EMPTY; PieceType::COUNT],
@@ -81,13 +80,13 @@ impl Position {
     pub fn side_to_move(&self) -> Color { self.stm }
 
     #[inline]
-    pub fn occupancy(&self) -> BitBoard { self.occ }
+    pub(crate) fn occupancy(&self) -> BitBoard { self.occ }
 
     #[inline]
-    pub fn color_occupancy(&self, color: Color) -> BitBoard { self.color_bb[color.index()] }
+    pub(crate) fn color_occupancy(&self, color: Color) -> BitBoard { self.color_bb[color.index()] }
 
     #[inline]
-    pub fn pieces(&self, color: Color, kind: PieceType) -> BitBoard {
+    pub(crate) fn pieces(&self, color: Color, kind: PieceType) -> BitBoard {
         self.piece_bb[kind.index()] & self.color_bb[color.index()]
     }
 
@@ -98,10 +97,10 @@ impl Position {
     }
 
     #[inline]
-    pub fn zobrist_key(&self) -> u64 { self.key }
+    pub(crate) fn zobrist_key(&self) -> u64 { self.key }
 
     #[inline]
-    pub fn zobrist_lock(&self) -> u32 { self.lock }
+    pub(crate) fn zobrist_lock(&self) -> u32 { self.lock }
 
     #[inline]
     pub fn king_square(&self, color: Color) -> Option<Square> {
@@ -113,7 +112,7 @@ impl Position {
     // Placement primitives (incremental updates for every derived field)
     // --------------------------------------------------------------------
 
-    pub fn put(&mut self, sq: Square, piece: Piece) {
+    pub(crate) fn put(&mut self, sq: Square, piece: Piece) {
         debug_assert!(self.mailbox[sq.raw() as usize] == EMPTY_MAILBOX_SLOT);
         let bb = BitBoard::from_square(sq);
         self.color_bb[piece.color().index()] |= bb;
@@ -129,7 +128,7 @@ impl Position {
         self.psq[piece.color().index()] += psq_value(piece, sq) as i32;
     }
 
-    pub fn remove(&mut self, sq: Square) -> Piece {
+    pub(crate) fn remove(&mut self, sq: Square) -> Piece {
         let raw = self.mailbox[sq.raw() as usize];
         debug_assert!(raw != EMPTY_MAILBOX_SLOT);
         let piece = Piece::from_index(raw as usize);
@@ -148,7 +147,7 @@ impl Position {
         piece
     }
 
-    pub fn flip_side_to_move(&mut self) {
+    pub(crate) fn flip_side_to_move(&mut self) {
         self.stm = self.stm.flip();
         let z = &*ZOBRIST;
         self.key ^= z.key_stm;
@@ -168,7 +167,7 @@ impl Position {
     /// Apply `mv` to the board. Returns the undo information; caller must pass it back to
     /// `undo_move`. Caller guarantees the move is *pseudo-legal* — king-safety is checked
     /// separately via `is_in_check` after the move.
-    pub fn make_move(&mut self, mv: Move) -> UndoInfo {
+    pub(crate) fn make_move(&mut self, mv: Move) -> UndoInfo {
         let src = mv.src();
         let dst = mv.dst();
         let key_before = self.key;
@@ -184,19 +183,19 @@ impl Position {
     }
 
     /// Pass the turn without moving a piece (null-move pruning).
-    pub fn make_null(&mut self) -> NullUndo {
+    pub(crate) fn make_null(&mut self) -> NullUndo {
         let info = NullUndo { key_before: self.key, lock_before: self.lock };
         self.flip_side_to_move();
         info
     }
 
-    pub fn undo_null(&mut self, info: NullUndo) {
+    pub(crate) fn undo_null(&mut self, info: NullUndo) {
         self.flip_side_to_move();
         debug_assert_eq!(self.key, info.key_before);
         debug_assert_eq!(self.lock, info.lock_before);
     }
 
-    pub fn undo_move(&mut self, mv: Move, info: UndoInfo) {
+    pub(crate) fn undo_move(&mut self, mv: Move, info: UndoInfo) {
         let src = mv.src();
         let dst = mv.dst();
 
@@ -224,7 +223,7 @@ impl Position {
     /// Note that pawn attacks for "is this square attacked by a pawn" is **not** the same as
     /// pawn move targets — pre-river pawns only attack forward; there is no separate capture
     /// rule like western chess. So we can reuse `PAWN_ATTACKS`.
-    pub fn attacks_from(&self, attacker: Color) -> BitBoard {
+    pub(crate) fn attacks_from(&self, attacker: Color) -> BitBoard {
         let mut att = BitBoard::EMPTY;
         let occ = self.occ;
 
@@ -289,19 +288,15 @@ impl Position {
     }
 
     // --------------------------------------------------------------------
-    // Utility for V2 incremental evaluation (reserved).
+    // Incremental evaluation helpers used by search/eval.
     // --------------------------------------------------------------------
 
     #[inline]
-    pub fn material(&self, color: Color) -> i32 { self.material[color.index()] }
+    pub(crate) fn material(&self, color: Color) -> i32 { self.material[color.index()] }
 
     /// PSQ score from red's perspective: `psq[red] - psq[black]`.
     #[inline]
-    pub fn psq_score(&self) -> i32 { self.psq[0] - self.psq[1] }
-
-    /// True if `sq` lies on `color`'s home side of the river.
-    #[inline]
-    pub fn is_home_half(sq: Square, color: Color) -> bool { HOME_HALVES[color.index()].has(sq) }
+    pub(crate) fn psq_score(&self) -> i32 { self.psq[0] - self.psq[1] }
 }
 
 // --------------------------------------------------------------------

@@ -9,10 +9,10 @@ pub enum Color {
 }
 
 impl Color {
-    pub const ALL: [Color; 2] = [Color::Red, Color::Black];
+    pub(crate) const ALL: [Color; 2] = [Color::Red, Color::Black];
 
     #[inline]
-    pub const fn index(self) -> usize { self as usize }
+    pub(crate) const fn index(self) -> usize { self as usize }
 
     #[inline]
     pub const fn flip(self) -> Color {
@@ -23,7 +23,7 @@ impl Color {
     }
 
     #[inline]
-    pub const fn from_index(i: usize) -> Color {
+    pub(crate) const fn from_index(i: usize) -> Color {
         match i {
             0 => Color::Red,
             _ => Color::Black,

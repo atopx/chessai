@@ -7,8 +7,6 @@ use std::ops::BitOrAssign;
 use std::ops::BitXor;
 use std::ops::BitXorAssign;
 use std::ops::Not;
-use std::ops::Shl;
-use std::ops::Shr;
 use std::ops::Sub;
 
 use crate::square::Square;
@@ -22,10 +20,8 @@ pub struct BitBoard(pub u128);
 
 impl BitBoard {
     pub const EMPTY: BitBoard = BitBoard(0);
+    #[cfg(test)]
     pub const FULL: BitBoard = BitBoard(BOARD_MASK);
-
-    #[inline]
-    pub const fn from_raw(raw: u128) -> BitBoard { BitBoard(raw & BOARD_MASK) }
 
     #[inline]
     pub const fn raw(self) -> u128 { self.0 }
@@ -37,17 +33,12 @@ impl BitBoard {
     pub const fn has(self, sq: Square) -> bool { (self.0 >> sq.raw() as u32) & 1 == 1 }
 
     #[inline]
-    pub const fn with(self, sq: Square) -> BitBoard { BitBoard(self.0 | (1u128 << sq.raw() as u32)) }
-
-    #[inline]
-    pub const fn without(self, sq: Square) -> BitBoard { BitBoard(self.0 & !(1u128 << sq.raw() as u32)) }
-
-    #[inline]
     pub const fn is_empty(self) -> bool { self.0 == 0 }
 
     #[inline]
     pub const fn any(self) -> bool { self.0 != 0 }
 
+    #[cfg(test)]
     #[inline]
     pub const fn popcount(self) -> u32 { self.0.count_ones() }
 
@@ -69,35 +60,6 @@ impl BitBoard {
     /// Iterate over every set square in ascending order.
     #[inline]
     pub const fn iter(self) -> BitBoardIter { BitBoardIter(self.0) }
-
-    // -------- Direction shifts (from red's perspective) --------
-
-    /// Rank + 1 (toward black's home).
-    #[inline]
-    pub const fn up(self) -> BitBoard { BitBoard((self.0 << 9) & BOARD_MASK) }
-
-    /// Rank - 1 (toward red's home).
-    #[inline]
-    pub const fn down(self) -> BitBoard { BitBoard(self.0 >> 9) }
-
-    /// File + 1.
-    #[inline]
-    pub const fn right(self) -> BitBoard { BitBoard(((self.0 & NOT_FILE_I.0) << 1) & BOARD_MASK) }
-
-    /// File - 1.
-    #[inline]
-    pub const fn left(self) -> BitBoard { BitBoard((self.0 & NOT_FILE_A.0) >> 1) }
-
-    /// Shift by an abstract direction. Non-const because it dispatches on the enum.
-    #[inline]
-    pub fn shift(self, dir: Direction) -> BitBoard {
-        match dir {
-            Direction::Up => self.up(),
-            Direction::Down => self.down(),
-            Direction::Left => self.left(),
-            Direction::Right => self.right(),
-        }
-    }
 }
 
 // -------- Iterator --------
@@ -168,18 +130,6 @@ impl Not for BitBoard {
     fn not(self) -> BitBoard { BitBoard(!self.0 & BOARD_MASK) }
 }
 
-impl Shl<u32> for BitBoard {
-    type Output = BitBoard;
-    #[inline]
-    fn shl(self, n: u32) -> BitBoard { BitBoard((self.0 << n) & BOARD_MASK) }
-}
-
-impl Shr<u32> for BitBoard {
-    type Output = BitBoard;
-    #[inline]
-    fn shr(self, n: u32) -> BitBoard { BitBoard(self.0 >> n) }
-}
-
 impl BitOrAssign for BitBoard {
     #[inline]
     fn bitor_assign(&mut self, rhs: BitBoard) { self.0 |= rhs.0; }
@@ -209,72 +159,6 @@ impl fmt::Display for BitBoard {
         Ok(())
     }
 }
-
-// -------- Direction enum --------
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum Direction {
-    Up,
-    Down,
-    Left,
-    Right,
-}
-
-impl Direction {
-    pub const ORTHO: [Direction; 4] = [Direction::Up, Direction::Down, Direction::Left, Direction::Right];
-}
-
-// -------- File / rank masks --------
-
-const fn file_mask(file: u8) -> BitBoard {
-    let mut m = 0u128;
-    let mut r = 0u8;
-    while r < 10 {
-        m |= 1u128 << (r * 9 + file) as u32;
-        r += 1;
-    }
-    BitBoard(m)
-}
-
-const fn rank_mask(rank: u8) -> BitBoard {
-    let mut m = 0u128;
-    let mut f = 0u8;
-    while f < 9 {
-        m |= 1u128 << (rank * 9 + f) as u32;
-        f += 1;
-    }
-    BitBoard(m)
-}
-
-pub const FILE_MASKS: [BitBoard; 9] = [
-    file_mask(0),
-    file_mask(1),
-    file_mask(2),
-    file_mask(3),
-    file_mask(4),
-    file_mask(5),
-    file_mask(6),
-    file_mask(7),
-    file_mask(8),
-];
-
-pub const RANK_MASKS: [BitBoard; 10] = [
-    rank_mask(0),
-    rank_mask(1),
-    rank_mask(2),
-    rank_mask(3),
-    rank_mask(4),
-    rank_mask(5),
-    rank_mask(6),
-    rank_mask(7),
-    rank_mask(8),
-    rank_mask(9),
-];
-
-pub const FILE_A: BitBoard = FILE_MASKS[0];
-pub const FILE_I: BitBoard = FILE_MASKS[8];
-pub const NOT_FILE_A: BitBoard = BitBoard(BOARD_MASK & !FILE_A.0);
-pub const NOT_FILE_I: BitBoard = BitBoard(BOARD_MASK & !FILE_I.0);
 
 // -------- Board region masks --------
 
@@ -339,42 +223,8 @@ mod tests {
 
     #[test]
     fn top_bits_always_zero() {
-        // NOT(EMPTY) must have exactly 90 bits set.
         let all = !BitBoard::EMPTY;
         assert_eq!(all.popcount(), 90);
-        // `<< 9` from the top rank must not overflow into unused bits.
-        let topmost = BitBoard::FULL & RANK_MASKS[9];
-        assert!((topmost.up().raw() >> 90) == 0);
-    }
-
-    #[test]
-    fn file_masks_are_disjoint_and_cover() {
-        let mut acc = BitBoard::EMPTY;
-        for m in FILE_MASKS {
-            assert_eq!(m.popcount(), 10);
-            assert!((acc & m).is_empty());
-            acc |= m;
-        }
-        assert_eq!(acc, BitBoard::FULL);
-    }
-
-    #[test]
-    fn rank_masks_are_disjoint_and_cover() {
-        let mut acc = BitBoard::EMPTY;
-        for m in RANK_MASKS {
-            assert_eq!(m.popcount(), 9);
-            assert!((acc & m).is_empty());
-            acc |= m;
-        }
-        assert_eq!(acc, BitBoard::FULL);
-    }
-
-    #[test]
-    fn shifts_clear_wrap() {
-        // Rightmost column shifted right should become empty in columns because of mask.
-        let c = FILE_I;
-        assert!(c.right().is_empty());
-        assert!((FILE_A).left().is_empty());
     }
 
     #[test]

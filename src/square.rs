@@ -1,7 +1,7 @@
 use std::fmt;
 
 use crate::color::Color;
-use crate::error::MoveParseError;
+use crate::error::ChessAIError;
 
 /// Packed square index `0..=89`. `rank * 9 + file`.
 ///
@@ -11,19 +11,16 @@ use crate::error::MoveParseError;
 pub struct Square(u8);
 
 impl Square {
-    pub const COUNT: usize = 90;
+    pub(crate) const COUNT: usize = 90;
 
     /// Caller promises `raw < 90`.
     ///
-    /// Prefer [`Square::from_index`] or [`Square::from_rank_file`] at API boundaries.
+    /// Prefer [`Square::from_rank_file`] at API boundaries.
     #[inline]
-    pub const fn new_unchecked(raw: u8) -> Square {
+    pub(crate) const fn new_unchecked(raw: u8) -> Square {
         debug_assert!(raw < 90);
         Square(raw)
     }
-
-    #[inline]
-    pub const fn from_index(raw: u8) -> Option<Square> { if raw < 90 { Some(Square(raw)) } else { None } }
 
     #[inline]
     pub const fn from_rank_file(rank: u8, file: u8) -> Option<Square> {
@@ -31,7 +28,7 @@ impl Square {
     }
 
     #[inline]
-    pub const fn raw(self) -> u8 { self.0 }
+    pub(crate) const fn raw(self) -> u8 { self.0 }
 
     #[inline]
     pub const fn rank(self) -> u8 { self.0 / 9 }
@@ -41,11 +38,11 @@ impl Square {
 
     /// Mirror across the vertical center (file reflection).
     #[inline]
-    pub const fn mirror_file(self) -> Square { Square(self.rank() * 9 + (8 - self.file())) }
+    pub(crate) const fn mirror_file(self) -> Square { Square(self.rank() * 9 + (8 - self.file())) }
 
     /// Flip across the river (rank reflection). Used for black-side PST lookups.
     #[inline]
-    pub const fn flip_rank(self) -> Square { Square((9 - self.rank()) * 9 + self.file()) }
+    pub(crate) const fn flip_rank(self) -> Square { Square((9 - self.rank()) * 9 + self.file()) }
 
     /// True if the square lies in its color's palace.
     #[inline]
@@ -60,31 +57,22 @@ impl Square {
         }
     }
 
-    /// Home half of the board, i.e. the side of the river owned by `color`.
-    #[inline]
-    pub const fn is_home_half(self, color: Color) -> bool {
-        match color {
-            Color::Red => self.rank() <= 4,
-            Color::Black => self.rank() >= 5,
-        }
-    }
-
     /// Parses ICCS cells `a0..=i9`.
-    pub fn from_iccs(s: &str) -> Result<Square, MoveParseError> {
+    pub fn from_iccs(s: &str) -> Result<Square, ChessAIError> {
         let b = s.as_bytes();
         if b.len() != 2 {
-            return Err(MoveParseError::BadIccs(s.to_string()));
+            return Err(ChessAIError::BadIccsSquare(s.to_string()));
         }
         let file = match b[0] {
             c @ b'a'..=b'i' => c - b'a',
             c @ b'A'..=b'I' => c - b'A',
-            _ => return Err(MoveParseError::BadIccs(s.to_string())),
+            _ => return Err(ChessAIError::BadIccsSquare(s.to_string())),
         };
         let rank = match b[1] {
             c @ b'0'..=b'9' => c - b'0',
-            _ => return Err(MoveParseError::BadIccs(s.to_string())),
+            _ => return Err(ChessAIError::BadIccsSquare(s.to_string())),
         };
-        Square::from_rank_file(rank, file).ok_or_else(|| MoveParseError::BadIccs(s.to_string()))
+        Square::from_rank_file(rank, file).ok_or_else(|| ChessAIError::BadIccsSquare(s.to_string()))
     }
 
     /// Emits the ICCS cell form, e.g. `b0`.
@@ -122,7 +110,7 @@ mod tests {
     #[test]
     fn iccs_roundtrip() {
         for raw in 0..90u8 {
-            let sq = Square::from_index(raw).unwrap();
+            let sq = Square::new_unchecked(raw);
             let s = sq.to_iccs();
             assert_eq!(Square::from_iccs(&s).unwrap(), sq);
         }
@@ -140,7 +128,7 @@ mod tests {
     #[test]
     fn flip_involution() {
         for raw in 0..90u8 {
-            let sq = Square::from_index(raw).unwrap();
+            let sq = Square::new_unchecked(raw);
             assert_eq!(sq.flip_rank().flip_rank(), sq);
             assert_eq!(sq.mirror_file().mirror_file(), sq);
         }

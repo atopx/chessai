@@ -8,7 +8,6 @@
 //! let mut engine = Engine::builder()
 //!     .hash_size(128)
 //!     .threads(4)
-//!     .rng_seed(42)
 //!     .build();
 //! let info = engine.search(Limits::new().depth(12).time(Duration::from_millis(500)));
 //! println!("{:?} score={} depth={} nps={}", info.best_move, info.score, info.depth, info.nps);
@@ -20,7 +19,7 @@ use std::sync::atomic::Ordering;
 use std::thread;
 
 use crate::book::Book;
-use crate::error::FenError;
+use crate::error::ChessAIError;
 use crate::fen::STARTING_FEN;
 use crate::limits::Limits;
 use crate::movegen::MoveList;
@@ -32,9 +31,12 @@ use crate::search::SearchInfo;
 use crate::tt::TranspositionTable;
 use crate::util::SplitMix64;
 
+/// Fixed seed for the internal book-randomisation RNG. A deterministic seed is fine: the
+/// book picks between moves stochastically, but users don't need to tune the sequence.
+const BOOK_RNG_SEED: u64 = 0x9E37_79B9_7F4A_7C15;
+
 pub struct EngineBuilder {
     hash_size_bytes: usize,
-    rng_seed: Option<u64>,
     use_book: bool,
     threads: u8,
 }
@@ -43,7 +45,6 @@ impl Default for EngineBuilder {
     fn default() -> Self {
         EngineBuilder {
             hash_size_bytes: 32 * 1024 * 1024, // 32 MB default
-            rng_seed: None,
             use_book: true,
             threads: 1,
         }
@@ -56,12 +57,6 @@ impl EngineBuilder {
     #[must_use]
     pub fn hash_size(mut self, mb: usize) -> Self {
         self.hash_size_bytes = mb * 1024 * 1024;
-        self
-    }
-
-    #[must_use]
-    pub fn rng_seed(mut self, seed: u64) -> Self {
-        self.rng_seed = Some(seed);
         self
     }
 
@@ -79,13 +74,6 @@ impl EngineBuilder {
     }
 
     pub fn build(self) -> Engine {
-        let seed = self.rng_seed.unwrap_or_else(|| {
-            use std::time::SystemTime;
-            SystemTime::now()
-                .duration_since(SystemTime::UNIX_EPOCH)
-                .map(|d| d.as_nanos() as u64)
-                .unwrap_or(0x9E37_79B9_7F4A_7C15)
-        });
         let position = Position::from_fen(STARTING_FEN).expect("startpos FEN parses");
         let book = if self.use_book { Some(Book::embedded()) } else { None };
         Engine {
@@ -93,7 +81,7 @@ impl EngineBuilder {
             tt: Arc::new(TranspositionTable::new(self.hash_size_bytes)),
             book,
             stop: Arc::new(AtomicBool::new(false)),
-            rng: SplitMix64::new(seed),
+            rng: SplitMix64::new(BOOK_RNG_SEED),
             move_counter: 0,
             game_keys: Vec::with_capacity(256),
             threads: self.threads,
@@ -119,7 +107,7 @@ impl Engine {
 
     pub fn position(&self) -> &Position { &self.position }
 
-    pub fn set_fen(&mut self, fen: &str) -> Result<(), FenError> {
+    pub fn set_fen(&mut self, fen: &str) -> Result<(), ChessAIError> {
         self.position = Position::from_fen(fen)?;
         // Shared TT — need interior-mutable clear. `Arc::get_mut` works when we're the sole
         // owner, which is true here since workers are joined before returning.
@@ -302,14 +290,14 @@ mod tests {
 
     #[test]
     fn single_thread_plays_a_move() {
-        let mut e = EngineBuilder::default().rng_seed(42).threads(1).build();
+        let mut e = EngineBuilder::default().threads(1).build();
         let info = e.search(Limits::new().depth(4).time(Duration::from_secs(2)));
         assert!(info.best_move.is_some());
     }
 
     #[test]
     fn parallel_plays_a_move() {
-        let mut e = EngineBuilder::default().rng_seed(42).threads(4).build();
+        let mut e = EngineBuilder::default().threads(4).build();
         let info = e.search(Limits::new().depth(6).time(Duration::from_secs(3)));
         assert!(info.best_move.is_some());
     }

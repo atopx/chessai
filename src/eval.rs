@@ -8,7 +8,6 @@ pub const MATE_VALUE: i32 = 10_000;
 pub const BAN_VALUE: i32 = MATE_VALUE - 100;
 pub const WIN_VALUE: i32 = MATE_VALUE - 200;
 pub const NULL_OKAY_MARGIN: i32 = 200;
-pub const NULL_SAFE_MARGIN: i32 = 400;
 pub const DRAW_VALUE: i32 = 20;
 
 /// Piece-square tables, one per piece type, indexed by **red-perspective** square

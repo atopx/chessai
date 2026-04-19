@@ -1,79 +1,186 @@
-# ChessAI - 中国象棋人工智能
+# ChessAI
 
-ChessAI是一个使用Rust开发的中国象棋人工智能引擎。本项目实现了完整的中国象棋规则、棋盘状态评估、搜索算法和开局库，可用于象棋对弈、分析和训练。
+[![Crates.io](https://img.shields.io/crates/v/chessai.svg)](https://crates.io/crates/chessai)
+[![docs.rs](https://img.shields.io/docsrs/chessai)](https://docs.rs/chessai)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-## 功能特点
+高性能中国象棋（Xiangqi）AI 引擎，基于 `u128` 位棋盘（bitboard）的纯 Rust 实现。
 
-- 完整实现中国象棋规则和逻辑
-- 高效的棋盘状态表示和评估
-- Alpha-Beta剪枝搜索算法
-- 开局库支持
-- FEN棋谱格式解析与生成
-- 中国象棋传统记谱法(ICCS)支持
+## 特性
 
-## 项目结构
+- **位棋盘表示**：单个 `u128` 覆盖 10×9 的中国象棋棋盘，所有走法生成均为位运算。
+- **Magic Bitboard 攻击表**：车、炮的快速查表攻击生成；马、象、兵、士、将采用预生成表。
+- **Alpha-Beta 搜索**：迭代加深 + 换位表（Zobrist 键）+ 空着裁剪 + PVS + 静态搜索（QS）。
+- **走法排序**：杀手启发、历史启发、反制走法、MVV-LVA、SEE 裁剪。
+- **Lazy SMP 并行**：多线程共享换位表，配合 depth-skip 模式分散搜索。
+- **开局库**：内嵌 `assets/BOOK.DAT`，支持走法镜像。
+- **FEN & ICCS**：完整的 FEN 解析/生成，ICCS 坐标（`b2-e2` 或 `b2e2`）双向转换。
+- **构建器 API**：`Engine::builder().hash_size(mb).threads(n).build()`，零配置即可运行。
 
-```
-src/
-├── lib.rs        - 引擎核心实现
-├── pregen.rs     - 预生成的常量和工具函数
-├── util.rs       - 工具函数
-├── book.rs       - 开局库实现
-├── state.rs      - 状态管理
-├── position.rs   - 位置表示和转换
-└── data/         - 预计算数据
-    ├── BOOK.dat          - 开局库数据
-    ├── FORT.dat          - 棋盘九宫格数据
-    ├── BROAD.dat         - 棋盘有效区域数据
-    ├── KEY_TABLE.dat     - Zobrist哈希键表
-    ├── LOCK_TABLE.dat    - Zobrist哈希锁表
-    ├── PIECE_VALUE.dat   - 棋子价值数据
-    ├── KNIGHT_PIN.dat    - 马腿位置数据
-    └── LEGAL_SPAN.dat    - 合法移动范围数据
+## 安装
+
+```toml
+[dependencies]
+chessai = "1"
 ```
 
-## 使用方法
-
-### 作为库使用
+## 快速开始
 
 ```rust
 use std::time::Duration;
 use chessai::{Engine, Limits};
 
 let mut engine = Engine::builder()
-    .hash_size(128)
-    .threads(4)
-    .rng_seed(42)
+    .hash_size(128)   // 换位表 128 MB
+    .threads(4)       // Lazy SMP 4 线程
     .build();
-let info = engine.search(Limits::new().depth(12).time(Duration::from_millis(500)));
-println!("{:?} score={} depth={} nps={}", info.best_move, info.score, info.depth, info.nps);
+
+let info = engine.search(
+    Limits::new()
+        .depth(12)
+        .time(Duration::from_millis(500)),
+);
+
+if let Some(mv) = info.best_move {
+    println!("best={mv} score={} depth={} nodes={} nps={} score={}",
+        info.score, info.depth, info.nodes, info.nps, info.score);
+}
 ```
 
-### 主要API
+### 从任意 FEN 开始
 
-- `Engine::new()` - 创建新的引擎实例
-- `Engine::from_fen(fen)` - 从FEN字符串加载棋盘状态
-- `Engine::to_fen()` - 将当前棋盘状态导出为FEN字符串
-- `Engine::search_main(depth, millis)` - 搜索最佳走法，指定深度和超时时间
-- `Engine::make_move(mv)` - 执行走法
-- `Engine::undo_make_move()` - 撤销走法
-- `Engine::winner()` - 判断当前是否有赢家，返回胜方
+```rust
+use chessai::Engine;
 
-## 性能
+let mut engine = Engine::builder().build();
+engine.set_fen("rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w")?;
+println!("fen: {}", engine.fen());
+println!("legal moves: {}", engine.legal_moves().len());
+# Ok::<(), chessai::ChessAIError>(())
+```
 
-ChessAI使用了多种优化技术来提高搜索效率：
+### 走子与对弈循环
 
-- Zobrist哈希表缓存
-- Alpha-Beta剪枝
-- 空着剪枝
-- 历史启发式搜索
-- 杀手着法表
-- MVV/LVA启发排序
+```rust
+use chessai::{Engine, Limits, Move};
+use std::time::Duration;
 
-## 开发与贡献
+let mut engine = Engine::builder().build();
+let mv = Move::from_iccs("b2-e2")?;
+assert!(engine.make_move(mv));
 
-欢迎对本项目进行贡献！可以通过提交Issue或Pull Request来参与项目开发。
+let reply = engine.search(Limits::new().time(Duration::from_millis(200)));
+println!("engine plays: {:?}", reply.best_move);
+# Ok::<(), chessai::ChessAIError>(())
+```
 
-## MIT许可证
+### 迭代回调
 
-[LICENSE](LICENSE)
+`search_with` 在每个完成的迭代深度触发一次回调，便于向 UI/日志流式输出：
+
+```rust
+use chessai::{Engine, Limits};
+use std::time::Duration;
+
+let mut engine = Engine::builder().threads(2).build();
+engine.search_with(
+    Limits::new().depth(14).time(Duration::from_secs(2)),
+    |info| println!("d={} score={} pv={:?}", info.depth, info.score, info.pv),
+);
+```
+
+### 跨线程停止
+
+`stop_handle()` 返回一个 `Arc<AtomicBool>`，任意线程写 `true` 即可请求搜索尽早返回当前最佳结果。
+
+```rust
+use chessai::{Engine, Limits};
+use std::sync::atomic::Ordering;
+use std::time::Duration;
+
+let mut engine = Engine::builder().build();
+let stop = engine.stop_handle();
+
+// 在其他线程按 GUI 按钮时：
+// stop.store(true, Ordering::Relaxed);
+
+let info = engine.search(Limits::new().time(Duration::from_secs(5)));
+# let _ = (stop, info);
+```
+
+## 公共 API
+
+| 类型 | 说明 |
+|------|------|
+| `Engine` / `EngineBuilder` | 引擎主入口，搜索与状态管理 |
+| `Position` | 不可变棋局视图（通过 `engine.position()` 获取） |
+| `Move` | 16 位压缩走法，支持 ICCS `from_iccs` / `to_iccs` |
+| `Square` | 0..=89 的格子索引，支持 ICCS (`a0..i9`) |
+| `Piece` / `PieceType` | 带颜色的棋子与棋子种类 |
+| `Color` | `Red` / `Black` |
+| `Limits` | 搜索限制（深度、时间、节点） |
+| `SearchInfo` | 搜索结果快照（best_move、pv、score、nodes、nps、time） |
+| `ChessAIError` | 统一错误类型（FEN / ICCS 解析错误） |
+
+### `Engine` 常用方法
+
+- `Engine::builder() -> EngineBuilder` — `hash_size(mb)`、`threads(n)`、`use_book(bool)`、`build()`
+- `engine.set_fen(&str) -> Result<(), ChessAIError>` — 加载 FEN，自动清空 TT 与历史
+- `engine.reset_to_startpos()` — 复位到开局
+- `engine.fen() -> String` — 导出当前 FEN
+- `engine.side_to_move() -> Color`
+- `engine.legal_moves() -> Vec<Move>`
+- `engine.make_move(Move) -> bool` — 伪合法校验 + 将军校验
+- `engine.book_move() -> Option<Move>` — 探询开局库
+- `engine.search(Limits) -> SearchInfo`
+- `engine.search_with(Limits, |&SearchInfo| …) -> SearchInfo`
+- `engine.stop_handle() -> Arc<AtomicBool>`
+
+## 项目结构
+
+```text
+chessai/
+├── Cargo.toml
+├── README.md
+├── LICENSE
+├── assets/
+│   └── BOOK.DAT          # 内嵌开局库
+└── src/
+    ├── lib.rs            # 公共导出
+    ├── engine.rs         # Engine / EngineBuilder
+    ├── position.rs       # 棋局状态、make/undo、Zobrist 增量更新
+    ├── movegen.rs        # 伪合法走法 / captures / quiets 生成
+    ├── attacks.rs        # 马、象、兵、士、将的攻击表
+    ├── magic.rs          # 车、炮的 Magic Bitboard 查表
+    ├── bitboard.rs       # u128 位棋盘原语与 90 格掩码
+    ├── search.rs         # Alpha-Beta、QS、迭代加深、Lazy SMP
+    ├── picker.rs         # 分阶段走法挑选器
+    ├── see.rs            # 静态交换评估
+    ├── eval.rs           # 物质 + PST 增量评估
+    ├── tt.rs             # 换位表（Zobrist 键 + lock 校验）
+    ├── zobrist.rs        # Zobrist 随机键
+    ├── book.rs           # 开局库探询
+    ├── fen.rs            # FEN 解析/生成
+    ├── limits.rs         # 搜索限制
+    ├── mv.rs             # 走法压缩表示
+    ├── square.rs         # 格子索引与 ICCS
+    ├── piece.rs / color.rs
+    ├── util.rs           # SplitMix64 RNG
+    └── error.rs          # ChessAIError
+```
+
+## 性能优化
+
+- **搜索**：PVS、NMP（空着裁剪）、LMR（后续走法减少）、Futility、SEE 裁剪
+- **走法排序**：TT 走法 → captures(MVV-LVA) → killers → countermove → history
+- **换位表**：Zobrist u64 键 + 32 位 lock 校验；置换策略按深度/年龄择优
+- **Lazy SMP**：主线程 id=0 驱动回调，工作线程按 Stockfish 风格 SKIP_SIZE/SKIP_PHASE 错开深度
+- **增量评估**：`make_move`/`undo_move` 同步维护物质分与 PST 分，避免全盘重算
+
+## 从源码构建
+
+```bash
+git clone https://github.com/atopx/chessai.git
+cd chessai
+cargo build --release
+```
