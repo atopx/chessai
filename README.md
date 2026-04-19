@@ -37,23 +37,16 @@ src/
 ### 作为库使用
 
 ```rust
-/// cargo add chessai
-use chessai::Engine;
+use std::time::Duration;
+use chessai::{Engine, Limits};
 
-fn main() {
-    // 创建引擎实例
-    let mut engine = Engine::new();
-    
-    // 从FEN字符串加载棋盘
-    engine.from_fen("rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w");
-    
-    // 进行搜索并获取最佳走法
-    let best_move = engine.search_main(10, 5000); // 搜索深度10，超时5秒
-    
-    // 将走法转换为ICCS表示
-    let iccs = chessai::position::move2iccs(best_move);
-    println!("最佳走法: {}", iccs);
-}
+let mut engine = Engine::builder()
+    .hash_size(128)
+    .threads(4)
+    .rng_seed(42)
+    .build();
+let info = engine.search(Limits::new().depth(12).time(Duration::from_millis(500)));
+println!("{:?} score={} depth={} nps={}", info.best_move, info.score, info.depth, info.nps);
 ```
 
 ### 主要API

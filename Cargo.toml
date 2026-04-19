@@ -1,11 +1,18 @@
 [package]
 name = "chessai"
-version = "0.1.11"
+version = "1.0.0"
 edition = "2024"
 authors = ["atopx <3940422@qq.com>"]
 repository = "https://github.com/atopx/chessai.git"
-description = "a chiness chess ai"
+description = "High-performance Xiangqi (Chinese Chess) AI engine with u128 bitboards"
 license = "MIT"
+readme = "README.md"
 
 [dependencies]
-rand = "0.9"
+thiserror = "2"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
