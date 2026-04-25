@@ -26,6 +26,7 @@ use crate::movegen::MoveList;
 use crate::movegen::generate_pseudo;
 use crate::mv::Move;
 use crate::position::Position;
+use crate::position::UndoInfo;
 use crate::search::Search;
 use crate::search::SearchInfo;
 use crate::tt::TranspositionTable;
@@ -84,6 +85,7 @@ impl EngineBuilder {
             rng: SplitMix64::new(BOOK_RNG_SEED),
             move_counter: 0,
             game_keys: Vec::with_capacity(256),
+            move_history: Vec::with_capacity(256),
             threads: self.threads,
         }
     }
@@ -97,6 +99,7 @@ pub struct Engine {
     rng: SplitMix64,
     move_counter: u32,
     game_keys: Vec<u64>,
+    move_history: Vec<(Move, UndoInfo)>,
     threads: u8,
 }
 
@@ -120,6 +123,7 @@ impl Engine {
         }
         self.move_counter = 0;
         self.game_keys.clear();
+        self.move_history.clear();
         Ok(())
     }
 
@@ -161,10 +165,28 @@ impl Engine {
         }
         self.game_keys.push(pre_key);
         self.move_counter += 1;
+        self.move_history.push((mv, undo));
         true
     }
 
+    /// Undo the most recently played move. Returns the move that was reverted, or `None` if
+    /// no moves have been played since the last `set_fen` / `reset_to_startpos` (or since
+    /// engine construction). Restores the board, repetition history, and move counter — but
+    /// does **not** clear the transposition table, since prior entries remain valid for the
+    /// restored positions.
+    pub fn undo_move(&mut self) -> Option<Move> {
+        let (mv, undo) = self.move_history.pop()?;
+        self.position.undo_move(mv, undo);
+        self.game_keys.pop();
+        self.move_counter = self.move_counter.saturating_sub(1);
+        Some(mv)
+    }
+
     pub fn game_key_history(&self) -> &[u64] { &self.game_keys }
+
+    pub fn history_len(&self) -> usize { self.move_history.len() }
+
+    pub fn move_history(&self) -> impl Iterator<Item = Move> + '_ { self.move_history.iter().map(|(m, _)| *m) }
 
     // ---------------- Book ----------------
 
@@ -306,5 +328,111 @@ mod tests {
     fn legal_move_count_is_44_at_startpos() {
         let mut e = Engine::default();
         assert_eq!(e.legal_moves().len(), 44);
+    }
+
+    #[test]
+    fn undo_after_make_restores_zobrist() {
+        let mut e = Engine::default();
+        let key0 = e.position().zobrist_key();
+        let mv = e.legal_moves()[0];
+        assert!(e.make_move(mv));
+        assert_ne!(e.position().zobrist_key(), key0);
+        assert_eq!(e.undo_move(), Some(mv));
+        assert_eq!(e.position().zobrist_key(), key0);
+    }
+
+    #[test]
+    fn undo_restores_legal_moves_set() {
+        use std::collections::HashSet;
+        let mut e = Engine::default();
+        let before: HashSet<_> = e.legal_moves().into_iter().collect();
+        let mv = e.legal_moves()[0];
+        e.make_move(mv);
+        e.undo_move();
+        let after: HashSet<_> = e.legal_moves().into_iter().collect();
+        assert_eq!(before, after);
+    }
+
+    #[test]
+    fn undo_restores_fen() {
+        let mut e = Engine::default();
+        let fen0 = e.fen();
+        let mv = e.legal_moves()[0];
+        e.make_move(mv);
+        e.undo_move();
+        assert_eq!(e.fen(), fen0);
+    }
+
+    #[test]
+    fn undo_on_empty_history_returns_none() {
+        let mut e = Engine::default();
+        assert_eq!(e.undo_move(), None);
+    }
+
+    #[test]
+    fn undo_decrements_counters() {
+        let mut e = Engine::default();
+        let mv = e.legal_moves()[0];
+        e.make_move(mv);
+        assert_eq!(e.history_len(), 1);
+        assert_eq!(e.game_key_history().len(), 1);
+        e.undo_move();
+        assert_eq!(e.history_len(), 0);
+        assert_eq!(e.game_key_history().len(), 0);
+    }
+
+    #[test]
+    fn set_fen_clears_history() {
+        let mut e = Engine::default();
+        let mv = e.legal_moves()[0];
+        e.make_move(mv);
+        e.set_fen(STARTING_FEN).unwrap();
+        assert_eq!(e.history_len(), 0);
+        assert_eq!(e.undo_move(), None);
+    }
+
+    #[test]
+    fn make_undo_make_yields_same_search_result() {
+        // Two searches at the same depth, with a make/undo pair in between, must agree —
+        // this catches TT corruption and game_keys desync.
+        let mut e = EngineBuilder::default().threads(1).use_book(false).build();
+        let limits = Limits::new().depth(4).time(Duration::from_secs(2));
+        let info_a = e.search(limits);
+        let mv = e.legal_moves()[0];
+        e.make_move(mv);
+        e.undo_move();
+        let info_b = e.search(limits);
+        assert_eq!(info_a.best_move, info_b.best_move);
+    }
+
+    #[test]
+    fn multi_ply_unwind_to_startpos() {
+        let mut e = Engine::default();
+        let fen0 = e.fen();
+        let mut played = Vec::new();
+        for _ in 0..5 {
+            let mv = e.legal_moves()[0];
+            assert!(e.make_move(mv));
+            played.push(mv);
+        }
+        assert_eq!(e.history_len(), 5);
+        for expected in played.iter().rev() {
+            assert_eq!(e.undo_move(), Some(*expected));
+        }
+        assert_eq!(e.history_len(), 0);
+        assert_eq!(e.fen(), fen0);
+    }
+
+    #[test]
+    fn move_history_iter_returns_played_moves_in_order() {
+        let mut e = Engine::default();
+        let mut played = Vec::new();
+        for _ in 0..3 {
+            let mv = e.legal_moves()[0];
+            e.make_move(mv);
+            played.push(mv);
+        }
+        let recorded: Vec<_> = e.move_history().collect();
+        assert_eq!(recorded, played);
     }
 }
